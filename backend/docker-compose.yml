@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_USER: candybaby
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: candybaby
+    volumes:
+      - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U candybaby -d candybaby"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://candybaby:${POSTGRES_PASSWORD}@postgres:5432/candybaby
+      PORT: 3000
+      AUTH_MODE: ${AUTH_MODE:-dev}
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      STARTING_SUGAR_COINS: ${STARTING_SUGAR_COINS:-1000}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    command: ["node", "dist/index.js"]
+
+  worker:
+    build:
+      context: ./server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://candybaby:${POSTGRES_PASSWORD}@postgres:5432/candybaby
+      TICK_INTERVAL_MS: ${TICK_INTERVAL_MS:-30000}
+      EVENT_CHANCE_PER_TICK: ${EVENT_CHANCE_PER_TICK:-0.08}
+      CIRCUIT_BREAKER: ${CIRCUIT_BREAKER:-0.05}
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]

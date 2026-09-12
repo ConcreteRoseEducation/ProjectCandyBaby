@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CandyBaby Market Desk</title>
+  <style>
+    :root {
+      --bg: #1b1224;
+      --card: #2a1b36;
+      --ink: #fff7f0;
+      --muted: #d7c4d8;
+      --accent: #ff7eb6;
+      --up: #7dffb3;
+      --down: #ff8a8a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      background: radial-gradient(circle at top, #3b2152, var(--bg));
+      color: var(--ink);
+    }
+    header, main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    h1 { margin: 0 0 8px; }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .card {
+      background: var(--card);
+      border: 1px solid #5a3a67;
+      border-radius: 16px;
+      padding: 16px;
+    }
+    input, select, button {
+      font: inherit;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 0;
+    }
+    button { background: var(--accent); cursor: pointer; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #4a3156; }
+    .up { color: var(--up); }
+    .down { color: var(--down); }
+    .muted { color: var(--muted); }
+    .event { margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CandyBaby Market Desk</h1>
+    <p class="muted">Teacher console for the classroom sugar market. Prices update live from the Pi.</p>
+    <div class="card">
+      <label>Admin token
+        <input id="token" type="password" placeholder="from ADMIN_TOKEN" />
+      </label>
+      <span id="status" class="muted"></span>
+    </div>
+  </header>
+  <main>
+    <div class="row">
+      <section class="card">
+        <h2>Live stocks</h2>
+        <table>
+          <thead><tr><th>Symbol</th><th>Price</th><th>Change</th></tr></thead>
+          <tbody id="stocks"></tbody>
+        </table>
+      </section>
+      <section class="card">
+        <h2>Fire a lesson event</h2>
+        <select id="templates"></select>
+        <button id="fire">Trigger event</button>
+        <p>
+          <label>Global volatility
+            <input id="vol" type="number" min="0.2" max="5" step="0.1" value="1" />
+          </label>
+          <button id="setVol">Apply</button>
+        </p>
+      </section>
+      <section class="card">
+        <h2>News tape</h2>
+        <div id="events"></div>
+      </section>
+      <section class="card">
+        <h2>Leaderboard</h2>
+        <table>
+          <thead><tr><th>Student</th><th>Total SC</th></tr></thead>
+          <tbody id="board"></tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+  <script>
+    const tokenInput = document.getElementById("token");
+    tokenInput.value = localStorage.getItem("adminToken") || "";
+    tokenInput.addEventListener("change", () => localStorage.setItem("adminToken", tokenInput.value));
+
+    const headers = () => ({ "Content-Type": "application/json", "x-admin-token": tokenInput.value });
+
+    async function refreshStocks() {
+      const res = await fetch("/stocks");
+      const data = await res.json();
+      document.getElementById("stocks").innerHTML = data.stocks.map((s) =>
+        `<tr><td>${s.symbol}<br><span class="muted">${s.name}</span></td><td>${Number(s.currentPrice).toFixed(2)}</td><td class="muted">${s.sector}</td></tr>`
+      ).join("");
+    }
+
+    async function refreshEvents() {
+      const res = await fetch("/events");
+      const data = await res.json();
+      document.getElementById("events").innerHTML = data.events.slice(0, 8).map((e) =>
+        `<div class="event"><strong>${e.title}</strong><div class="muted">${e.narrative}</div></div>`
+      ).join("") || "<p class='muted'>No events yet. The market will invent some, or you can fire one.</p>";
+    }
+
+    async function refreshBoard() {
+      const res = await fetch("/leaderboard");
+      const data = await res.json();
+      document.getElementById("board").innerHTML = data.leaderboard.map((row) =>
+        `<tr><td>${row.display_name}</td><td>${Number(row.total_value).toFixed(2)}</td></tr>`
+      ).join("") || "<tr><td colspan='2' class='muted'>No traders yet</td></tr>";
+    }
+
+    async function loadTemplates() {
+      const res = await fetch("/admin/event-templates", { headers: headers() });
+      if (!res.ok) {
+        document.getElementById("status").textContent = "Admin token needed for lesson controls.";
+        return;
+      }
+      const data = await res.json();
+      document.getElementById("templates").innerHTML = data.templates.map((t) =>
+        `<option value="${t.id}">${t.title}</option>`
+      ).join("");
+      document.getElementById("status").textContent = "Admin connected.";
+    }
+
+    document.getElementById("fire").onclick = async () => {
+      const templateId = document.getElementById("templates").value;
+      const res = await fetch("/admin/events", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ templateId }),
+      });
+      const data = await res.json();
+      document.getElementById("status").textContent = res.ok ? `Fired: ${data.event.title}` : data.error;
+      refreshEvents();
+    };
+
+    document.getElementById("setVol").onclick = async () => {
+      const globalVolatility = Number(document.getElementById("vol").value);
+      const res = await fetch("/admin/volatility", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ globalVolatility }),
+      });
+      const data = await res.json();
+      document.getElementById("status").textContent = res.ok ? `Volatility set to ${data.globalVolatility}` : data.error;
+    };
+
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const socket = new WebSocket(`${proto}://${location.host}/ws`);
+    socket.onmessage = (event) => {
+      const payload = JSON.parse(event.data);
+      if (payload.type === "tick") {
+        const body = document.getElementById("stocks");
+        body.innerHTML = payload.stocks.map((s) => {
+          const cls = s.changePct >= 0 ? "up" : "down";
+          const sign = s.changePct >= 0 ? "+" : "";
+          return `<tr><td>${s.symbol}<br><span class="muted">${s.name}</span></td><td>${s.currentPrice.toFixed(2)}</td><td class="${cls}">${sign}${s.changePct.toFixed(2)}%</td></tr>`;
+        }).join("");
+      }
+      if (payload.type === "event") refreshEvents();
+    };
+
+    refreshStocks();
+    refreshEvents();
+    refreshBoard();
+    loadTemplates();
+    setInterval(refreshBoard, 15000);
+  </script>
+</body>
+</html>

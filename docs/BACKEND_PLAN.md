@@ -92,6 +92,10 @@ Because the stack is fully Dockerized and stateless aside from the Postgres volu
 
 ---
 
+## Status (Pi-ready core)
+
+Phases 0–3, 5, and 7 are implemented in `backend/` enough to run a classroom market on a Pi 5. Statistics caching (Phase 4) is still a live leaderboard query rather than a cache table job. Android still talks to Firestore (Phase 6). Pi hardening (SSD, backups, tunnel) is documented in `docs/PI_SETUP.md`.
+
 ## Suggested build order
 
 1. Phase 0 + Phase 1 (scaffolding + schema) — nothing else can start without this.
@@ -104,9 +108,14 @@ Because the stack is fully Dockerized and stateless aside from the Postgres volu
 8. Phase 8 (Pi ops hardening: backups, monitoring, USB SSD) — before this is trusted with real classroom use.
 9. Phase 9 (migration runbook) — once you're ready to move off the Pi.
 
+## Decisions made during implementation
+
+- TypeScript + `pg` with versioned SQL migrations (no ORM).
+- Tick worker is a separate Docker service sharing the API image.
+- Guest/dev auth is the Pi default (`AUTH_MODE=dev`); Firebase token verification is wired but optional.
+- Setup notes: `docs/PI_SETUP.md`.
+
 ## Open items to revisit (non-blocking)
 
-- TypeScript vs. plain JS for `backend/server` (recommend TypeScript given the stateful ledger logic).
-- ORM/migration tool choice (Prisma/Drizzle + a migration CLI) — pick before Phase 1 schema work starts.
-- Whether the tick worker runs as a separate process/container from the API, or as an in-process scheduled job — separate process is cleaner but is an early decision, not a blocker.
-- Retirement timeline for `backend/functions` (Firestore/Cloud Functions) — keep running in parallel until Phase 6's read path is validated, then decommission.
+- Retirement timeline for `backend/functions` (Firestore/Cloud Functions) — keep running in parallel until Phase 6's Android read path is validated, then decommission.
+- Cloudflare Tunnel / Tailscale when the classroom is not on the same LAN.
