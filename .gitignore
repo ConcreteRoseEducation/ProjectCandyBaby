@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# CandyBaby market server
+backend/.env
+backend/data/
+backend/server/node_modules/
+backend/server/dist/
