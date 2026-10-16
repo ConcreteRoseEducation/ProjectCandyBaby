@@ -1,19 +1,18 @@
-# Run CandyBaby on a Raspberry Pi 5
+# Run Sugar Market on a Raspberry Pi 5
 
-The market now lives in `backend/`: Postgres/TimescaleDB, a Node API, and a tick worker. The Android app still talks to Firestore until we migrate it; this stack is the classroom server you can start today.
+The market lives in `backend/`: Postgres/TimescaleDB, a Node API, and a tick worker.
 
 ## What you get after `docker compose up`
 
-- Live prices for FIZ, KRSP, COCO, GUM, SHK, and CNDY
+- Live prices for 300+ snack stocks across 6 sectors
+- Real-time stock price updates on player buy and sell orders
 - Sector + market correlation, mean reversion, and a 5% circuit breaker
-- Random news events, plus teacher-triggered lesson events
+- Random news events, plus custom and teacher-triggered lesson events
 - REST API on port 3000 and a live WebSocket at `/ws`
 - Teacher desk at `http://<pi-ip>:3000/admin.html`
 - Server-authoritative paper trades (`POST /trades`)
 
 ## 1. On the Pi
-
-You already have Docker. From a laptop on the same network:
 
 ```bash
 git clone <your-repo-url> ProjectCandyBaby
@@ -24,74 +23,26 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
-If the project is not on GitHub yet, copy the folder with `scp` or a USB drive instead of cloning.
+Wait until logs show `Sugar Market API listening on :3000`.
 
-Wait until logs show `CandyBaby API listening` and `Market ticked 6 stocks`. Then from any device on the LAN:
+## 2. Remote Access via Cloudflare Tunnel (Cellular / Remote Testing)
 
-```bash
-curl http://<pi-ip>:3000/health
-curl http://<pi-ip>:3000/stocks
-```
+To test the Android app from anywhere off your local Wi-Fi:
 
-Open `http://<pi-ip>:3000/admin.html`, paste the `ADMIN_TOKEN`, and fire a lesson event.
+1. On the Raspberry Pi, run the tunnel helper script:
+   ```bash
+   cd ~/ProjectCandyBaby/backend
+   ./start_tunnel.sh
+   ```
+2. Terminal output will show your secure public URL:
+   `https://<your-custom-subdomain>.trycloudflare.com`
+3. In Android Studio, open `app/build.gradle.kts` and update `MARKET_BASE_URL`:
+   ```kotlin
+   buildConfigField("String", "MARKET_BASE_URL", "\"https://<your-custom-subdomain>.trycloudflare.com\"")
+   ```
+4. Rebuild the Android app and run it on your mobile device!
 
-## 2. Find the Pi's IP
-
-On the Pi:
-
-```bash
-hostname -I
-```
-
-Use the LAN address (usually `192.168.x.x`).
-
-## 3. Try a paper trade (guest mode)
-
-Dev auth is on by default. No Firebase service account is required yet.
-
-```bash
-curl -X POST http://<pi-ip>:3000/trades \
-  -H 'Content-Type: application/json' \
-  -H 'X-Dev-User: alex' \
-  -H 'X-Dev-Name: Alex' \
-  -d '{"symbol":"FIZ","type":"BUY","quantity":5}'
-
-curl http://<pi-ip>:3000/portfolio -H 'X-Dev-User: alex'
-```
-
-## 4. Put Postgres on a USB SSD (recommended)
-
-An always-writing database will wear out a microSD card. After the SSD is mounted (example: `/mnt/ssd`):
-
-1. `docker compose down`
-2. In `.env`, set `POSTGRES_DATA_DIR=/mnt/ssd/candybaby-pg`
-3. `mkdir -p /mnt/ssd/candybaby-pg`
-4. `docker compose up -d`
-
-If you already have data in `backend/data/postgres`, copy that folder onto the SSD first.
-
-## 5. Keep it running
-
-```bash
-docker compose ps
-docker compose logs -f worker
-```
-
-Containers use `restart: unless-stopped`, so they come back after a reboot as long as Docker is enabled:
-
-```bash
-sudo systemctl enable docker
-```
-
-Nightly backup (add to `crontab -e` on the Pi):
-
-```bash
-0 3 * * * docker exec backend-postgres-1 pg_dump -U candybaby candybaby > /home/pi/candybaby-$(date +\%F).sql
-```
-
-The container name may be `backend-postgres-1` or `candybaby-postgres-1`. Check with `docker compose ps`.
-
-## 6. Useful teacher API
+## 3. Useful Teacher API
 
 | Action | Request |
 | --- | --- |
@@ -101,13 +52,8 @@ The container name may be `backend-postgres-1` or `candybaby-postgres-1`. Check 
 | Candles | `GET /stocks/FIZ/candles?timeframe=1m` |
 | News | `GET /events` |
 | Leaderboard | `GET /leaderboard` |
-| Fire event | `POST /admin/events` with header `x-admin-token` and body `{"templateId":"sugar_crash"}` |
+| Fire template event | `POST /admin/events` with header `x-admin-token` and body `{"templateId":"sugar_crash"}` |
+| Fire custom event | `POST /admin/events` with header `x-admin-token` and body `{"title":"Pop Quiz Rush","scope":"market","magnitude":0.08,"durationTicks":4}` |
+| Toggle Server Type | `POST /admin/server-type` `{"serverType":"private"}` |
+| Force Market Tick | `POST /admin/tick` |
 | Volatility | `POST /admin/volatility` `{"globalVolatility":1.5}` |
-
-Event template ids include `fiz_earnings_beat`, `coco_miss`, `gum_launch`, `krsp_recall`, `cocoa_shock`, `halloween_demand`, `soda_tax`, `sugar_rally`, `sugar_crash`, `shk_expansion`.
-
-## 7. Later: expose beyond your house
-
-Do not port-forward 3000 to the public internet. Use a Cloudflare Tunnel or Tailscale Funnel when you want phones off the school Wi-Fi to reach the Pi.
-
-Firebase Auth can replace guest headers later: set `AUTH_MODE=firebase` and mount a service account. The Android app still needs a follow-up change to call this API instead of Firestore.

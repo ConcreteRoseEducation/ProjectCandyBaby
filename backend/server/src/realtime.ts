@@ -6,7 +6,7 @@ export function attachRealtime(server: http.Server): WebSocketServer {
   const wss = new WebSocketServer({ server, path: "/ws" });
 
   wss.on("connection", (socket) => {
-    socket.send(JSON.stringify({ type: "hello", message: "CandyBaby market stream" }));
+    socket.send(JSON.stringify({ type: "hello", message: "Sugar Market stream" }));
   });
 
   const listener = pool.connect().then(async (client) => {

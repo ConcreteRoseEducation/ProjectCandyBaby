@@ -2,6 +2,9 @@ import { Router } from "express";
 import { pool, withTransaction } from "../db/client";
 import { AuthedRequest, requireAuth } from "../auth";
 import { TradeType } from "../types";
+import { config } from "../config";
+import { upsertCandle } from "../engine/market";
+import { notifyPayload } from "../engine/events";
 
 export const economyRouter = Router();
 
@@ -48,7 +51,10 @@ economyRouter.post("/trades", requireAuth, async (req: AuthedRequest, res) => {
   try {
     const result = await withTransaction(async (client) => {
       const stock = await client.query(
-        "SELECT id, symbol, current_price FROM stocks WHERE symbol = $1 AND is_active = TRUE FOR UPDATE",
+        `SELECT s.id, s.symbol, s.name, s.current_price, sec.display_name AS sector_name
+         FROM stocks s
+         JOIN sectors sec ON sec.id = s.sector_id
+         WHERE s.symbol = $1 AND s.is_active = TRUE FOR UPDATE OF s`,
         [symbol],
       );
       if (!stock.rows[0]) {
@@ -124,9 +130,59 @@ economyRouter.post("/trades", requireAuth, async (req: AuthedRequest, res) => {
         [user.id, stockId, type, quantity, price],
       );
 
-      return { symbol, type, quantity, pricePerUnit: price, cost };
+      // Real-time stock price update based on player buy & sell data
+      const stateRow = await client.query<{ server_type: string }>(
+        "SELECT COALESCE(server_type, 'public') AS server_type FROM market_state WHERE id = 1",
+      );
+      const serverType = (stateRow.rows[0]?.server_type ?? config.serverType) as "public" | "private";
+      const impactPerShare = serverType === "private" ? config.privateImpactPerShare : config.publicImpactPerShare;
+      const tradeImpactPct = (type === "BUY" ? 1 : -1) * quantity * impactPerShare;
+      const newPrice = Math.max(0.01, Number((price * (1 + tradeImpactPct)).toFixed(4)));
+
+      const buyVol = type === "BUY" ? quantity : 0;
+      const sellVol = type === "SELL" ? quantity : 0;
+
+      await client.query(
+        `UPDATE stocks
+         SET current_price = $1,
+             pending_buy_volume = pending_buy_volume + $2,
+             pending_sell_volume = pending_sell_volume + $3
+         WHERE id = $4`,
+        [newPrice, buyVol, sellVol, stockId],
+      );
+
+      const now = new Date();
+      await client.query(
+        "INSERT INTO price_ticks (stock_id, ts, price, volume) VALUES ($1, $2, $3, $4)",
+        [stockId, now.toISOString(), newPrice, quantity],
+      );
+      for (const tf of ["1m", "5m", "1h", "1d"]) {
+        await upsertCandle(client, stockId, newPrice, quantity, now, tf);
+      }
+
+      const updatePayload = {
+        type: "tick",
+        stocks: [
+          {
+            symbol: stock.rows[0].symbol,
+            name: stock.rows[0].name,
+            sector: stock.rows[0].sector_name,
+            currentPrice: newPrice,
+            previousPrice: price,
+            changePct: Number((tradeImpactPct * 100).toFixed(3)),
+          },
+        ],
+        at: now.toISOString(),
+      };
+
+      return {
+        trade: { symbol, type, quantity, pricePerUnit: price, cost, newPrice },
+        updatePayload,
+      };
     });
-    res.status(201).json(result);
+
+    await notifyPayload("market_tick", result.updatePayload);
+    res.status(201).json(result.trade);
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Trade failed" });
   }

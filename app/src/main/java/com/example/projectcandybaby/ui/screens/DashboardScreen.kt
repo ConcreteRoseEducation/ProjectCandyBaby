@@ -5,11 +5,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.projectcandybaby.data.model.Holding
+import com.example.projectcandybaby.data.model.MarketEvent
 import com.example.projectcandybaby.ui.components.AllocationChart
 import com.example.projectcandybaby.ui.components.StockChart
 
@@ -21,11 +23,29 @@ fun DashboardScreen(
     portfolioHistory: List<Double>,
     sectorAllocation: Map<String, Double>,
     profitLoss: Map<String, Double>,
+    serverType: String = "public",
+    marketEvents: List<MarketEvent> = emptyList(),
     onMarketClick: () -> Unit
 ) {
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(title = { Text("CandyBaby Dashboard") })
+            CenterAlignedTopAppBar(
+                title = { Text("Sugar Market Dashboard") },
+                actions = {
+                    Surface(
+                        shape = MaterialTheme.shapes.extraSmall,
+                        color = if (serverType == "private") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier.padding(end = 12.dp)
+                    ) {
+                        Text(
+                            text = if (serverType == "private") "🔒 Private" else "🌐 Public",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            )
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(onClick = onMarketClick) {
@@ -54,6 +74,25 @@ fun DashboardScreen(
                     }
                 }
             }
+
+            if (marketEvents.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Latest Market News & Events", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            val event = marketEvents.first()
+                            Text("📢 ${event.title}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(event.narrative, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
             
             item { Spacer(modifier = Modifier.height(24.dp)) }
 
@@ -63,7 +102,7 @@ fun DashboardScreen(
                 if (portfolioHistory.isNotEmpty()) {
                     StockChart(priceHistory = portfolioHistory)
                 } else {
-                    Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+                    Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
                         Text("Tracking performance... check back soon!")
                     }
                 }

@@ -84,6 +84,66 @@ export async function fireTemplateById(templateId: string, createdBy: string): P
   }
 }
 
+export type CustomEventInput = {
+  title: string;
+  narrative: string;
+  type?: string;
+  scope: "stock" | "sector" | "market";
+  targetKey?: string;
+  magnitude: number;
+  durationTicks: number;
+};
+
+export async function fireCustomEvent(
+  input: CustomEventInput,
+  createdBy: string,
+): Promise<EventRow> {
+  const { pool } = await import("../db/client");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    let targetId: number | null = null;
+    if (input.scope === "stock" && input.targetKey) {
+      const stock = await client.query<{ id: number }>(
+        "SELECT id FROM stocks WHERE symbol = $1",
+        [input.targetKey.toUpperCase()],
+      );
+      targetId = stock.rows[0]?.id ?? null;
+    }
+    if (input.scope === "sector" && input.targetKey) {
+      const sector = await client.query<{ id: number }>(
+        "SELECT id FROM sectors WHERE key = $1 OR display_name = $1",
+        [input.targetKey],
+      );
+      targetId = sector.rows[0]?.id ?? null;
+    }
+
+    const inserted = await client.query<EventRow>(
+      `INSERT INTO events
+        (type, scope, target_id, title, narrative, magnitude, decay_type, duration_ticks, remaining_ticks, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, 'linear', $7, $7, $8)
+       RETURNING *`,
+      [
+        input.type || "admin_event",
+        input.scope,
+        targetId,
+        input.title,
+        input.narrative || input.title,
+        input.magnitude,
+        input.durationTicks,
+        createdBy,
+      ],
+    );
+    await client.query("COMMIT");
+    return inserted.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function loadActiveEvents(client: PoolClient): Promise<EventRow[]> {
   const result = await client.query<EventRow>(
     `SELECT * FROM events WHERE remaining_ticks > 0 ORDER BY id`,

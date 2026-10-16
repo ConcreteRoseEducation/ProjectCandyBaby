@@ -25,6 +25,8 @@ fun CandyBabyApp(viewModel: MainViewModel) {
     val portfolioHistory by viewModel.portfolioHistory.collectAsState()
     val sectorAllocation by viewModel.sectorAllocation.collectAsState()
     val profitLoss by viewModel.profitLoss.collectAsState()
+    val serverType by viewModel.serverType.collectAsState()
+    val marketEvents by viewModel.marketEvents.collectAsState()
 
     if (currentUser == null && !isBypassed) {
         LoginScreen(
@@ -42,12 +44,16 @@ fun CandyBabyApp(viewModel: MainViewModel) {
                     portfolioHistory = portfolioHistory,
                     sectorAllocation = sectorAllocation,
                     profitLoss = profitLoss,
+                    serverType = serverType,
+                    marketEvents = marketEvents,
                     onMarketClick = { navController.navigate("market") }
                 )
             }
             composable("market") {
                 MarketScreen(
                     stocks = stocks,
+                    serverType = serverType,
+                    marketEvents = marketEvents,
                     onStockClick = { stock -> navController.navigate("market/${stock.symbol}") },
                     onBack = { navController.popBackStack() }
                 )
@@ -56,9 +62,14 @@ fun CandyBabyApp(viewModel: MainViewModel) {
                 val symbol = backStackEntry.arguments?.getString("symbol")
                 val stock = stocks.find { it.symbol == symbol }
                 if (stock != null) {
+                    val ownedShares = holdings.find { it.symbol == stock.symbol }?.quantity ?: 0
                     MarketDetailScreen(
                         stock = stock,
+                        serverType = serverType,
+                        sugarCoins = sugarCoins,
+                        ownedShares = ownedShares,
                         onBuy = { qty -> viewModel.buyStock(stock, qty) },
+                        onSell = { qty -> viewModel.sellStock(stock, qty) },
                         onBack = { navController.popBackStack() }
                     )
                 }

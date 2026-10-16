@@ -6,8 +6,8 @@ import { requireAdmin } from "./auth";
 import { config } from "./config";
 import { queryOne, waitForDatabase } from "./db/client";
 import { migrate } from "./db/migrate";
-import { fireTemplateById, getTemplateCatalog, listEvents, notifyPayload } from "./engine/events";
-import { getCandles, getRecentTicks, getStock, listStocks, seedPriceHistoryIfEmpty } from "./engine/market";
+import { fireCustomEvent, fireTemplateById, getTemplateCatalog, listEvents, notifyPayload } from "./engine/events";
+import { getCandles, getRecentTicks, getStock, getServerType, setServerType, listStocks, seedPriceHistoryIfEmpty, tickMarket } from "./engine/market";
 import { attachRealtime } from "./realtime";
 import { economyRouter } from "./routes/economy";
 
@@ -29,18 +29,23 @@ async function main(): Promise<void> {
     const state = await queryOne<{ last_tick_at: Date | null; global_volatility: number }>(
       "SELECT last_tick_at, global_volatility FROM market_state WHERE id = 1",
     );
+    const serverType = await getServerType();
     res.json({
       ok: true,
-      service: "candybaby-market",
+      service: "sugar-market",
       lastTickAt: state?.last_tick_at ?? null,
       globalVolatility: state?.global_volatility ?? 1,
+      serverType,
+      tickIntervalMs: config.tickIntervalMs,
       authMode: config.authMode,
     });
   });
 
   app.get("/stocks", async (_req, res) => {
     const stocks = await listStocks();
+    const serverType = await getServerType();
     res.json({
+      serverType,
       stocks: stocks.map((stock) => ({
         symbol: stock.symbol,
         name: stock.name,
@@ -60,6 +65,7 @@ async function main(): Promise<void> {
       return;
     }
     const ticks = await getRecentTicks(stock.symbol, 50);
+    const serverType = await getServerType();
     res.json({
       symbol: stock.symbol,
       name: stock.name,
@@ -70,6 +76,7 @@ async function main(): Promise<void> {
       description: stock.description,
       priceHistory: ticks.map((tick) => Number(tick.price)),
       ticks,
+      serverType,
     });
   });
 
@@ -99,18 +106,56 @@ async function main(): Promise<void> {
   });
 
   app.post("/admin/events", requireAdmin, async (req, res) => {
-    const templateId = String(req.body?.templateId ?? "");
-    if (!templateId) {
-      res.status(400).json({ error: "templateId is required" });
-      return;
-    }
+    const templateId = req.body?.templateId ? String(req.body.templateId) : null;
+    const title = req.body?.title ? String(req.body.title) : null;
+
     try {
-      const event = await fireTemplateById(templateId, "admin");
+      let event;
+      if (templateId) {
+        event = await fireTemplateById(templateId, "admin");
+      } else if (title) {
+        const scope = String(req.body?.scope ?? "market") as "stock" | "sector" | "market";
+        const narrative = String(req.body?.narrative ?? title);
+        const targetKey = req.body?.targetKey ? String(req.body.targetKey) : undefined;
+        const magnitude = Number(req.body?.magnitude ?? 0.05);
+        const durationTicks = Number(req.body?.durationTicks ?? 4);
+
+        event = await fireCustomEvent(
+          {
+            title,
+            narrative,
+            scope,
+            targetKey,
+            magnitude,
+            durationTicks,
+          },
+          "admin",
+        );
+      } else {
+        res.status(400).json({ error: "Either templateId or title is required" });
+        return;
+      }
+
       await notifyPayload("market_event", { type: "event", event });
       res.status(201).json({ event });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Failed to fire event" });
     }
+  });
+
+  app.get("/admin/server-type", requireAdmin, async (_req, res) => {
+    const serverType = await getServerType();
+    res.json({ serverType });
+  });
+
+  app.post("/admin/server-type", requireAdmin, async (req, res) => {
+    const serverType = String(req.body?.serverType ?? "").toLowerCase();
+    if (serverType !== "public" && serverType !== "private") {
+      res.status(400).json({ error: "serverType must be 'public' or 'private'" });
+      return;
+    }
+    await setServerType(serverType as "public" | "private");
+    res.json({ serverType });
   });
 
   app.post("/admin/volatility", requireAdmin, async (req, res) => {
@@ -123,13 +168,30 @@ async function main(): Promise<void> {
     res.json({ globalVolatility: value });
   });
 
+  app.post("/admin/tick", requireAdmin, async (_req, res) => {
+    try {
+      await tickMarket();
+      res.json({ ok: true, message: "Market ticked successfully" });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to tick market" });
+    }
+  });
+
   app.use(economyRouter);
+
+  // Background ticker loop (ticks every config.tickIntervalMs regardless of trades)
+  console.log(`Starting background market ticker (interval: ${config.tickIntervalMs}ms / ${Math.round(config.tickIntervalMs / 1000)}s)`);
+  setInterval(() => {
+    tickMarket().catch((error) => {
+      console.error("Scheduled market tick failed", error);
+    });
+  }, config.tickIntervalMs);
 
   const server = http.createServer(app);
   attachRealtime(server);
 
   server.listen(config.port, "0.0.0.0", () => {
-    console.log(`CandyBaby API listening on :${config.port}`);
+    console.log(`Sugar Market API listening on :${config.port}`);
   });
 }
 

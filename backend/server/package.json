@@ -1,8 +1,8 @@
 {
-  "name": "candybaby-market-server",
+  "name": "sugar-market-server",
   "version": "1.0.0",
   "private": true,
-  "description": "CandyBaby stock market API and tick worker",
+  "description": "Sugar Market stock API and tick worker",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

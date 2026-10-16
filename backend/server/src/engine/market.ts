@@ -28,7 +28,7 @@ function candleBucket(date: Date, timeframe: string): Date {
   return new Date(Math.floor(ms / size) * size);
 }
 
-async function upsertCandle(
+export async function upsertCandle(
   client: PoolClient,
   stockId: number,
   price: number,
@@ -94,15 +94,31 @@ export async function seedPriceHistoryIfEmpty(): Promise<void> {
   }
 }
 
+export async function getServerType(): Promise<"public" | "private"> {
+  const result = await pool.query<{ server_type: string }>(
+    "SELECT server_type FROM market_state WHERE id = 1",
+  );
+  return (result.rows[0]?.server_type as "public" | "private") ?? config.serverType;
+}
+
+export async function setServerType(serverType: "public" | "private"): Promise<"public" | "private"> {
+  await pool.query(
+    "UPDATE market_state SET server_type = $1 WHERE id = 1",
+    [serverType],
+  );
+  return serverType;
+}
+
 export async function tickMarket(): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    const state = await client.query<{ market_factor: number; global_volatility: number }>(
-      "SELECT market_factor, global_volatility FROM market_state WHERE id = 1 FOR UPDATE",
+    const state = await client.query<{ market_factor: number; global_volatility: number; server_type: string }>(
+      "SELECT market_factor, global_volatility, COALESCE(server_type, 'public') AS server_type FROM market_state WHERE id = 1 FOR UPDATE",
     );
     const market = state.rows[0];
+    const serverType = (market.server_type ?? config.serverType) as "public" | "private";
     const marketShock = gaussian() * 0.008 * market.global_volatility;
     const nextMarketFactor = market.market_factor * 0.7 + marketShock * 0.3;
 
@@ -138,7 +154,7 @@ export async function tickMarket(): Promise<void> {
       );
     }
 
-    const stocks = await client.query<StockRow>(
+    const stocks = await client.query<StockRow & { pending_buy_volume?: number; pending_sell_volume?: number }>(
       `SELECT s.*, sec.key AS sector_key, sec.display_name AS sector_name
        FROM stocks s JOIN sectors sec ON sec.id = s.sector_id
        WHERE s.is_active = TRUE
@@ -161,16 +177,23 @@ export async function tickMarket(): Promise<void> {
       const meanReversion = 0.015 * ((stock.base_price - stock.current_price) / stock.base_price);
       const sectorFactor = sectorShockById.get(stock.sector_id) ?? 0;
       const eventDelta = eventDeltaByStock.get(stock.id) ?? 0;
+
+      const pendingBuy = Number((stock as any).pending_buy_volume ?? 0);
+      const pendingSell = Number((stock as any).pending_sell_volume ?? 0);
+      const netOrderVolume = pendingBuy - pendingSell;
+      const impactMultiplier = serverType === "private" ? config.privateImpactPerShare : config.publicImpactPerShare;
+      const orderFlowImpact = netOrderVolume * impactMultiplier;
+
       const change = clamp(
-        nextMarketFactor + sectorFactor + idioShock + meanReversion + eventDelta,
+        nextMarketFactor + sectorFactor + idioShock + meanReversion + eventDelta + orderFlowImpact,
         -config.circuitBreaker,
         config.circuitBreaker,
       );
       const newPrice = Math.max(0.01, stock.current_price * (1 + change));
-      const volume = Math.max(10, 100 + gaussian() * 25 + Math.abs(change) * 800);
+      const volume = Math.max(10, 100 + gaussian() * 25 + Math.abs(change) * 800 + pendingBuy + pendingSell);
 
       await client.query(
-        "UPDATE stocks SET current_price = $1, volatility = $2 WHERE id = $3",
+        "UPDATE stocks SET current_price = $1, volatility = $2, pending_buy_volume = 0, pending_sell_volume = 0 WHERE id = $3",
         [newPrice, nextVol, stock.id],
       );
       await client.query(

@@ -20,6 +20,8 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // LAN address of the classroom Pi. Change this if DHCP gives the Pi a new IP.
+        buildConfigField("String", "MARKET_BASE_URL", "\"http://192.168.1.120:3000\"")
     }
 
     buildTypes {
@@ -35,6 +37,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     room {
         schemaDirectory("$projectDir/schemas")
@@ -62,6 +65,7 @@ dependencies {
     implementation(libs.vico.compose.m3)
     implementation(libs.vico.compose)
     implementation(libs.firebase.ai)
+    implementation(libs.okhttp)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

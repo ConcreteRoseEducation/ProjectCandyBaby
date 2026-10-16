@@ -22,7 +22,7 @@ fun LoginScreen(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Welcome to CandyBaby Pro",
+            text = "Welcome to Sugar Market",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
@@ -35,14 +35,18 @@ fun LoginScreen(
         )
         Spacer(modifier = Modifier.height(48.dp))
         Button(
-            onClick = onSignInClick,
+            onClick = onBypassClick,
             modifier = Modifier.fillMaxWidth().height(56.dp)
         ) {
-            Text("Sign in with Google 🍭")
+            Text("Continue as Guest")
         }
         Spacer(modifier = Modifier.height(16.dp))
-        TextButton(onClick = onBypassClick) {
-            Text("Bypass Login (Guest Mode)")
+        OutlinedButton(
+            onClick = onSignInClick,
+            enabled = false,
+            modifier = Modifier.fillMaxWidth().height(56.dp)
+        ) {
+            Text("Sign in with Google (not wired yet)")
         }
     }
 }

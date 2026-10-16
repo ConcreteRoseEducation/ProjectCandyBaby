@@ -26,7 +26,7 @@ fun DisclaimerScreen(onAccept: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "CandyBaby is an educational simulation. No real money is used, and no real stock market trades are executed.",
+            text = "Sugar Market is an educational simulation. No real money is used, and no real stock market trades are executed.",
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyLarge
         )
