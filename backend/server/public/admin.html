@@ -70,11 +70,14 @@
   <main>
     <div class="row">
       <section class="card">
-        <h2>Live stocks</h2>
-        <table>
-          <thead><tr><th>Symbol</th><th>Price</th><th>Change</th></tr></thead>
-          <tbody id="stocks"></tbody>
-        </table>
+        <h2>Live stocks (<span id="stockCount">0</span>)</h2>
+        <input id="stockSearch" placeholder="Search symbol or name..." style="margin-bottom: 12px;" />
+        <div style="max-height: 480px; overflow-y: auto;">
+          <table>
+            <thead><tr><th>Symbol</th><th>Price</th><th>Sector</th></tr></thead>
+            <tbody id="stocks"></tbody>
+          </table>
+        </div>
       </section>
 
       <section class="card">
@@ -159,6 +162,8 @@
       document.getElementById("toggleServerType").textContent = currentServerType === "public" ? "Switch to Private Server" : "Switch to Public Server";
     }
 
+    let allStocks = [];
+
     async function refreshStocks() {
       const res = await fetch("/stocks");
       const data = await res.json();
@@ -167,10 +172,22 @@
         document.getElementById("serverTypeBadge").textContent = currentServerType;
         document.getElementById("toggleServerType").textContent = currentServerType === "public" ? "Switch to Private Server" : "Switch to Public Server";
       }
-      document.getElementById("stocks").innerHTML = data.stocks.map((s) =>
-        `<tr><td>${s.symbol}<br><span class="muted">${s.name}</span></td><td>${Number(s.currentPrice).toFixed(2)} SC</td><td class="muted">${s.sector}</td></tr>`
-      ).join("");
+      allStocks = data.stocks || [];
+      document.getElementById("stockCount").textContent = allStocks.length;
+      renderStocksTable();
     }
+
+    function renderStocksTable() {
+      const query = (document.getElementById("stockSearch")?.value || "").toLowerCase();
+      const filtered = allStocks.filter(s =>
+        s.symbol.toLowerCase().includes(query) || s.name.toLowerCase().includes(query)
+      );
+      document.getElementById("stocks").innerHTML = filtered.map((s) =>
+        `<tr><td>${s.symbol}<br><span class="muted">${s.name}</span></td><td>${Number(s.currentPrice).toFixed(2)} SC</td><td class="muted">${s.sector}</td></tr>`
+      ).join("") || "<tr><td colspan='3' class='muted'>No matching stocks</td></tr>";
+    }
+
+    document.getElementById("stockSearch")?.addEventListener("input", renderStocksTable);
 
     async function refreshEvents() {
       const res = await fetch("/events");

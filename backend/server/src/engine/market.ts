@@ -53,20 +53,20 @@ export async function upsertCandle(
 export async function seedPriceHistoryIfEmpty(): Promise<void> {
   await pool.query("SELECT pg_advisory_lock(872342)");
   try {
-    const existing = await pool.query("SELECT 1 FROM price_ticks LIMIT 1");
-    if ((existing.rowCount ?? 0) > 0) {
+    const unseededStocks = await pool.query<StockRow>(
+      `SELECT s.*, sec.key AS sector_key, sec.display_name AS sector_name
+       FROM stocks s JOIN sectors sec ON sec.id = s.sector_id
+       WHERE NOT EXISTS (SELECT 1 FROM price_ticks pt WHERE pt.stock_id = s.id)`,
+    );
+    if ((unseededStocks.rowCount ?? 0) === 0) {
       return;
     }
 
-    const stocks = await pool.query<StockRow>(
-      `SELECT s.*, sec.key AS sector_key, sec.display_name AS sector_name
-       FROM stocks s JOIN sectors sec ON sec.id = s.sector_id`,
-    );
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
       const now = Date.now();
-      for (const stock of stocks.rows) {
+      for (const stock of unseededStocks.rows) {
         let price = stock.base_price;
         for (let i = 20; i >= 1; i--) {
           const change = gaussian() * 0.01;
@@ -82,7 +82,7 @@ export async function seedPriceHistoryIfEmpty(): Promise<void> {
         await client.query("UPDATE stocks SET current_price = $1 WHERE id = $2", [price, stock.id]);
       }
       await client.query("COMMIT");
-      console.log("Seeded initial price history");
+      console.log(`Seeded initial price history for ${unseededStocks.rows.length} stocks`);
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
