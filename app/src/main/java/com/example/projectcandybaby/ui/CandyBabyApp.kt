@@ -66,6 +66,7 @@ fun CandyBabyApp(viewModel: MainViewModel) {
                     MarketDetailScreen(
                         stock = stock,
                         serverType = serverType,
+                        sugarCoins = sugarCoins,
                         ownedShares = ownedShares,
                         onBuy = { qty -> viewModel.buyStock(stock, qty) },
                         onSell = { qty -> viewModel.sellStock(stock, qty) },

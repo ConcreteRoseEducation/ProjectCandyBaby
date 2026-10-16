@@ -15,12 +15,15 @@ import com.example.projectcandybaby.ui.components.StockChart
 fun MarketDetailScreen(
     stock: StockTicker,
     serverType: String,
+    sugarCoins: Double,
     ownedShares: Int,
     onBuy: (Int) -> Unit,
     onSell: (Int) -> Unit,
     onBack: () -> Unit
 ) {
     var selectedQuantity by remember { mutableStateOf(1) }
+    val totalCost = stock.currentPrice * selectedQuantity
+    val canAfford = sugarCoins >= totalCost
 
     Scaffold(
         topBar = {
@@ -84,10 +87,18 @@ fun MarketDetailScreen(
                             "⚡ Real-time Market: Player buy and sell orders drive price movements in real time.",
                         style = MaterialTheme.typography.bodySmall
                     )
-                    if (ownedShares > 0) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         Text(
-                            text = "You own $ownedShares shares of ${stock.symbol}",
+                            text = "Cash Available: ${String.format("%.2f", sugarCoins)} SC",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Owned: $ownedShares shares",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -136,13 +147,27 @@ fun MarketDetailScreen(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "Total: ${String.format("%.2f", totalCost)} SC",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Button(
                     onClick = { onBuy(selectedQuantity) },
+                    enabled = canAfford,
                     modifier = Modifier.weight(1f).height(50.dp)
                 ) {
-                    Text("Buy $selectedQuantity")
+                    Text(if (canAfford) "Buy $selectedQuantity" else "Need Cash")
                 }
 
                 Button(
