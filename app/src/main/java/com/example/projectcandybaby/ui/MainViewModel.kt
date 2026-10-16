@@ -1,44 +1,48 @@
 package com.example.projectcandybaby.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.projectcandybaby.data.db.HoldingDao
 import com.example.projectcandybaby.data.db.PortfolioDao
-import com.example.projectcandybaby.data.db.TransactionDao
 import com.example.projectcandybaby.data.model.Holding
 import com.example.projectcandybaby.data.model.PortfolioPoint
 import com.example.projectcandybaby.data.model.StockTicker
-import com.example.projectcandybaby.data.model.Transaction
-import com.example.projectcandybaby.data.model.TransactionType
 import com.example.projectcandybaby.data.repository.AuthRepository
-import com.example.projectcandybaby.data.repository.FirestoreMarketRepository
+import com.example.projectcandybaby.data.repository.PiMarketRepository
 import com.example.projectcandybaby.data.repository.UserPreferencesRepository
-import com.example.projectcandybaby.logic.MarketEngine
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlin.random.Random
 
 class MainViewModel(
-    private val holdingDao: HoldingDao,
-    private val transactionDao: TransactionDao,
     private val portfolioDao: PortfolioDao,
     private val userPrefs: UserPreferencesRepository,
     private val authRepository: AuthRepository,
-    private val firestoreMarketRepository: FirestoreMarketRepository,
-    private val marketEngine: MarketEngine
+    private val piMarketRepository: PiMarketRepository,
 ) : ViewModel() {
 
     private val _isBypassed = MutableStateFlow(false)
     val isBypassed = _isBypassed.asStateFlow()
 
+    private val _holdings = MutableStateFlow<List<Holding>>(emptyList())
+    val holdings = _holdings.asStateFlow()
+
+    private val _sugarCoins = MutableStateFlow(1000.0)
+    val sugarCoins = _sugarCoins.asStateFlow()
+
     val currentUser = authRepository.currentUser
-    val stocks = firestoreMarketRepository.getGlobalStocks()
+    val stocks = piMarketRepository.getGlobalStocks()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-    
-    val holdings = holdingDao.getAllHoldings().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-    val sugarCoins = userPrefs.sugarCoinsFlow.stateIn(viewModelScope, SharingStarted.Lazily, 1000.0)
-    val disclaimerAccepted = userPrefs.disclaimerAcceptedFlow.stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    val serverType = piMarketRepository.serverType
+    val marketEvents = piMarketRepository.marketEvents
+
+    val disclaimerAccepted = userPrefs.disclaimerAcceptedFlow
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     val portfolioHistory = portfolioDao.getHistory()
         .map { points -> points.map { it.totalValue } }
@@ -55,41 +59,19 @@ class MainViewModel(
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
 
     val profitLoss = combine(holdings, stocks) { hList, sList ->
-        hList.map { h ->
+        hList.associate { h ->
             val stock = sList.find { it.symbol == h.symbol }
             val currentVal = (stock?.currentPrice ?: 0.0) * h.quantity
             val purchaseVal = h.averagePurchasePrice * h.quantity
             h.symbol to (currentVal - purchaseVal)
-        }.toMap()
+        }
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
 
     init {
-        // Seed initial data if empty
+        viewModelScope.launch { refreshPortfolio() }
         viewModelScope.launch {
-            val history = portfolioDao.getHistory().first()
-            if (history.isEmpty()) {
-                val startValue = 1000.0
-                val points = List(20) { i ->
-                    val variance = (Random.nextDouble() * 2 - 1) * 50.0
-                    PortfolioPoint(
-                        timestamp = System.currentTimeMillis() - (20 - i) * 60000,
-                        totalValue = startValue + variance + (i * 5)
-                    )
-                }
-                points.forEach { portfolioDao.insertPoint(it) }
-            }
-        }
-
-        // Record portfolio value every 30 seconds
-        viewModelScope.launch {
-            while (true) {
-                val total = sugarCoins.value + holdings.value.sumOf { holding ->
-                    val currentPrice = stocks.value.find { it.symbol == holding.symbol }?.currentPrice ?: 0.0
-                    holding.quantity * currentPrice
-                }
-                portfolioDao.insertPoint(PortfolioPoint(totalValue = total))
-                delay(30000)
-            }
+            combine(currentUser, isBypassed) { _, _ -> }
+                .collect { refreshPortfolio() }
         }
     }
 
@@ -101,51 +83,47 @@ class MainViewModel(
 
     fun bypassAuth() {
         _isBypassed.value = true
+        viewModelScope.launch { refreshPortfolio() }
     }
 
     fun buyStock(ticker: StockTicker, quantity: Int) {
         viewModelScope.launch {
-            val cost = ticker.currentPrice * quantity
-            val currentBalance = sugarCoins.value
-            if (currentBalance >= cost) {
-                val newBalance = currentBalance - cost
-                userPrefs.updateSugarCoins(newBalance)
-
-                val existingHolding = holdingDao.getHoldingBySymbol(ticker.symbol)
-                if (existingHolding != null) {
-                    val newQuantity = existingHolding.quantity + quantity
-                    val newAvgPrice = ((existingHolding.averagePurchasePrice * existingHolding.quantity) + cost) / newQuantity
-                    holdingDao.updateHolding(existingHolding.copy(quantity = newQuantity, averagePurchasePrice = newAvgPrice))
-                } else {
-                    holdingDao.insertHolding(Holding(ticker.symbol, quantity, ticker.currentPrice))
-                }
-
-                transactionDao.insertTransaction(
-                    Transaction(symbol = ticker.symbol, type = TransactionType.BUY, quantity = quantity, pricePerUnit = ticker.currentPrice)
-                )
+            try {
+                piMarketRepository.placeTrade(ticker.symbol, "BUY", quantity)
+                refreshPortfolio()
+            } catch (error: Exception) {
+                Log.e(TAG, "Buy failed", error)
             }
         }
     }
 
     fun sellStock(ticker: StockTicker, quantity: Int) {
         viewModelScope.launch {
-            val existingHolding = holdingDao.getHoldingBySymbol(ticker.symbol)
-            if (existingHolding != null && existingHolding.quantity >= quantity) {
-                val proceeds = ticker.currentPrice * quantity
-                val newBalance = sugarCoins.value + proceeds
-                userPrefs.updateSugarCoins(newBalance)
-
-                val newQuantity = existingHolding.quantity - quantity
-                if (newQuantity > 0) {
-                    holdingDao.updateHolding(existingHolding.copy(quantity = newQuantity))
-                } else {
-                    holdingDao.deleteHolding(existingHolding)
-                }
-
-                transactionDao.insertTransaction(
-                    Transaction(symbol = ticker.symbol, type = TransactionType.SELL, quantity = quantity, pricePerUnit = ticker.currentPrice)
-                )
+            try {
+                piMarketRepository.placeTrade(ticker.symbol, "SELL", quantity)
+                refreshPortfolio()
+            } catch (error: Exception) {
+                Log.e(TAG, "Sell failed", error)
             }
         }
+    }
+
+    private suspend fun refreshPortfolio() {
+        try {
+            val (coins, remoteHoldings) = piMarketRepository.fetchPortfolio()
+            _sugarCoins.value = coins
+            _holdings.value = remoteHoldings
+            val total = coins + remoteHoldings.sumOf { holding ->
+                val price = stocks.value.find { it.symbol == holding.symbol }?.currentPrice ?: 0.0
+                holding.quantity * price
+            }
+            portfolioDao.insertPoint(PortfolioPoint(totalValue = total))
+        } catch (error: Exception) {
+            Log.e(TAG, "Failed to refresh portfolio from Pi", error)
+        }
+    }
+
+    companion object {
+        private const val TAG = "MainViewModel"
     }
 }

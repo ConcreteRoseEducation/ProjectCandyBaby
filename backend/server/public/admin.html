@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CandyBaby Market Desk</title>
+  <title>Sugar Market Desk</title>
   <style>
     :root {
       --bg: #1b1224;
@@ -23,36 +23,47 @@
     }
     header, main { max-width: 1100px; margin: 0 auto; padding: 16px; }
     h1 { margin: 0 0 8px; }
-    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
     .card {
       background: var(--card);
       border: 1px solid #5a3a67;
       border-radius: 16px;
       padding: 16px;
     }
-    input, select, button {
+    input, select, button, textarea {
       font: inherit;
       padding: 8px 10px;
       border-radius: 10px;
-      border: 0;
+      border: 1px solid #5a3a67;
+      background: #1b1224;
+      color: var(--ink);
+      width: 100%;
+      margin-bottom: 8px;
     }
-    button { background: var(--accent); cursor: pointer; font-weight: 700; }
+    button { background: var(--accent); color: #1b1224; cursor: pointer; font-weight: 700; border: 0; width: auto; margin-top: 4px; }
     table { width: 100%; border-collapse: collapse; }
     th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #4a3156; }
     .up { color: var(--up); }
     .down { color: var(--down); }
     .muted { color: var(--muted); }
-    .event { margin-bottom: 10px; }
+    .event { margin-bottom: 10px; border-left: 3px solid var(--accent); padding-left: 8px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; background: #5a3a67; }
   </style>
 </head>
 <body>
   <header>
-    <h1>CandyBaby Market Desk</h1>
-    <p class="muted">Teacher console for the classroom sugar market. Prices update live from the Pi.</p>
+    <h1>Sugar Market Desk</h1>
+    <p class="muted">Teacher console for Sugar Market. Prices update live from the server.</p>
     <div class="card">
-      <label>Admin token
-        <input id="token" type="password" placeholder="from ADMIN_TOKEN" />
-      </label>
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <label>Admin token:
+          <input id="token" type="password" placeholder="from ADMIN_TOKEN" style="width: 200px; display: inline-block;" />
+        </label>
+        <div>
+          Server Mode: <span id="serverTypeBadge" class="badge">public</span>
+          <button id="toggleServerType">Switch to Private Server</button>
+        </div>
+      </div>
       <span id="status" class="muted"></span>
     </div>
   </header>
@@ -65,21 +76,63 @@
           <tbody id="stocks"></tbody>
         </table>
       </section>
+
       <section class="card">
-        <h2>Fire a lesson event</h2>
+        <h2>Fire Event Template</h2>
         <select id="templates"></select>
-        <button id="fire">Trigger event</button>
-        <p>
-          <label>Global volatility
-            <input id="vol" type="number" min="0.2" max="5" step="0.1" value="1" />
+        <button id="fire">Trigger Preset Event</button>
+        <hr style="border-color: #4a3156; margin: 16px 0;" />
+
+        <h2>Create Custom Market Event</h2>
+        <label>Event Title
+          <input id="customTitle" placeholder="e.g. Pop Quiz Sugar Rush" />
+        </label>
+        <label>Narrative / News Flash
+          <textarea id="customNarrative" rows="2" placeholder="e.g. Students stock up on Fizzy Drinks for late-night studying!"></textarea>
+        </label>
+        <div style="display: flex; gap: 8px;">
+          <label style="flex: 1;">Scope
+            <select id="customScope">
+              <option value="market">Market-wide</option>
+              <option value="stock">Single Stock</option>
+              <option value="sector">Sector</option>
+            </select>
           </label>
-          <button id="setVol">Apply</button>
+          <label style="flex: 1;">Target Symbol / Key
+            <input id="customTarget" placeholder="e.g. FIZ or FIZZY_DRINKS" />
+          </label>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <label style="flex: 1;">Magnitude (+0.10 = +10%)
+            <input id="customMag" type="number" step="0.01" value="0.08" />
+          </label>
+          <label style="flex: 1;">Duration (Ticks)
+            <input id="customTicks" type="number" min="1" value="4" />
+          </label>
+        </div>
+        <button id="fireCustom">Fire Custom Event</button>
+
+        <hr style="border-color: #4a3156; margin: 16px 0;" />
+        <div>
+          <h3>Market Tick Controls</h3>
+          <p class="muted">Market ticks automatically every 30 seconds regardless of trades. You can also force a tick now:</p>
+          <button id="forceTick">⚡ Force Market Tick Now</button>
+        </div>
+
+        <hr style="border-color: #4a3156; margin: 16px 0;" />
+        <p>
+          <label>Global volatility:
+            <input id="vol" type="number" min="0.2" max="5" step="0.1" value="1" style="width: 100px; display: inline-block;" />
+          </label>
+          <button id="setVol">Apply Volatility</button>
         </p>
       </section>
+
       <section class="card">
         <h2>News tape</h2>
         <div id="events"></div>
       </section>
+
       <section class="card">
         <h2>Leaderboard</h2>
         <table>
@@ -96,11 +149,26 @@
 
     const headers = () => ({ "Content-Type": "application/json", "x-admin-token": tokenInput.value });
 
+    let currentServerType = "public";
+
+    async function refreshServerType() {
+      const res = await fetch("/health");
+      const data = await res.json();
+      currentServerType = data.serverType || "public";
+      document.getElementById("serverTypeBadge").textContent = currentServerType;
+      document.getElementById("toggleServerType").textContent = currentServerType === "public" ? "Switch to Private Server" : "Switch to Public Server";
+    }
+
     async function refreshStocks() {
       const res = await fetch("/stocks");
       const data = await res.json();
+      if (data.serverType) {
+        currentServerType = data.serverType;
+        document.getElementById("serverTypeBadge").textContent = currentServerType;
+        document.getElementById("toggleServerType").textContent = currentServerType === "public" ? "Switch to Private Server" : "Switch to Public Server";
+      }
       document.getElementById("stocks").innerHTML = data.stocks.map((s) =>
-        `<tr><td>${s.symbol}<br><span class="muted">${s.name}</span></td><td>${Number(s.currentPrice).toFixed(2)}</td><td class="muted">${s.sector}</td></tr>`
+        `<tr><td>${s.symbol}<br><span class="muted">${s.name}</span></td><td>${Number(s.currentPrice).toFixed(2)} SC</td><td class="muted">${s.sector}</td></tr>`
       ).join("");
     }
 
@@ -108,7 +176,7 @@
       const res = await fetch("/events");
       const data = await res.json();
       document.getElementById("events").innerHTML = data.events.slice(0, 8).map((e) =>
-        `<div class="event"><strong>${e.title}</strong><div class="muted">${e.narrative}</div></div>`
+        `<div class="event"><strong>${e.title}</strong> (${e.remaining_ticks > 0 ? e.remaining_ticks + ' ticks left' : 'expired'})<div class="muted">${e.narrative}</div></div>`
       ).join("") || "<p class='muted'>No events yet. The market will invent some, or you can fire one.</p>";
     }
 
@@ -133,6 +201,22 @@
       document.getElementById("status").textContent = "Admin connected.";
     }
 
+    document.getElementById("toggleServerType").onclick = async () => {
+      const targetType = currentServerType === "public" ? "private" : "public";
+      const res = await fetch("/admin/server-type", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ serverType: targetType }),
+      });
+      if (res.ok) {
+        await refreshServerType();
+        document.getElementById("status").textContent = `Server mode switched to ${targetType}.`;
+      } else {
+        const err = await res.json();
+        document.getElementById("status").textContent = err.error || "Failed to switch server mode";
+      }
+    };
+
     document.getElementById("fire").onclick = async () => {
       const templateId = document.getElementById("templates").value;
       const res = await fetch("/admin/events", {
@@ -141,7 +225,34 @@
         body: JSON.stringify({ templateId }),
       });
       const data = await res.json();
-      document.getElementById("status").textContent = res.ok ? `Fired: ${data.event.title}` : data.error;
+      document.getElementById("status").textContent = res.ok ? `Fired template: ${data.event.title}` : data.error;
+      refreshEvents();
+    };
+
+    document.getElementById("fireCustom").onclick = async () => {
+      const title = document.getElementById("customTitle").value;
+      const narrative = document.getElementById("customNarrative").value;
+      const scope = document.getElementById("customScope").value;
+      const targetKey = document.getElementById("customTarget").value;
+      const magnitude = Number(document.getElementById("customMag").value);
+      const durationTicks = Number(document.getElementById("customTicks").value);
+
+      if (!title) {
+        document.getElementById("status").textContent = "Custom event requires a title.";
+        return;
+      }
+
+      const res = await fetch("/admin/events", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ title, narrative, scope, targetKey, magnitude, durationTicks }),
+      });
+      const data = await res.json();
+      document.getElementById("status").textContent = res.ok ? `Fired custom event: ${data.event.title}` : data.error;
+      if (res.ok) {
+        document.getElementById("customTitle").value = "";
+        document.getElementById("customNarrative").value = "";
+      }
       refreshEvents();
     };
 
@@ -156,6 +267,16 @@
       document.getElementById("status").textContent = res.ok ? `Volatility set to ${data.globalVolatility}` : data.error;
     };
 
+    document.getElementById("forceTick").onclick = async () => {
+      const res = await fetch("/admin/tick", {
+        method: "POST",
+        headers: headers(),
+      });
+      const data = await res.json();
+      document.getElementById("status").textContent = res.ok ? "Market ticked successfully!" : (data.error || "Tick failed");
+      refreshStocks();
+    };
+
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const socket = new WebSocket(`${proto}://${location.host}/ws`);
     socket.onmessage = (event) => {
@@ -165,12 +286,13 @@
         body.innerHTML = payload.stocks.map((s) => {
           const cls = s.changePct >= 0 ? "up" : "down";
           const sign = s.changePct >= 0 ? "+" : "";
-          return `<tr><td>${s.symbol}<br><span class="muted">${s.name}</span></td><td>${s.currentPrice.toFixed(2)}</td><td class="${cls}">${sign}${s.changePct.toFixed(2)}%</td></tr>`;
+          return `<tr><td>${s.symbol}<br><span class="muted">${s.name}</span></td><td>${s.currentPrice.toFixed(2)} SC</td><td class="${cls}">${sign}${s.changePct.toFixed(2)}%</td></tr>`;
         }).join("");
       }
       if (payload.type === "event") refreshEvents();
     };
 
+    refreshServerType();
     refreshStocks();
     refreshEvents();
     refreshBoard();

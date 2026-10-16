@@ -45,7 +45,15 @@ hostname -I
 
 Use the LAN address (usually `192.168.x.x`).
 
-## 3. Try a paper trade (guest mode)
+## 3. Point the Android app at the Pi
+
+The app reads live stocks from `http://192.168.1.120:3000`. That URL is set in `app/build.gradle.kts` as `MARKET_BASE_URL`.
+
+- Phone or tablet: same Wi-Fi as the Pi, then rebuild the app.
+- If `hostname -I` on the Pi shows a different address, update `MARKET_BASE_URL` and rebuild.
+- Guest mode sends `X-Dev-User: guest`. A Firebase login sends that user's uid (and a Bearer token if Auth is enabled on the Pi).
+
+## 4. Try a paper trade (guest mode)
 
 Dev auth is on by default. No Firebase service account is required yet.
 
@@ -59,7 +67,7 @@ curl -X POST http://<pi-ip>:3000/trades \
 curl http://<pi-ip>:3000/portfolio -H 'X-Dev-User: alex'
 ```
 
-## 4. Put Postgres on a USB SSD (recommended)
+## 5. Put Postgres on a USB SSD (recommended)
 
 An always-writing database will wear out a microSD card. After the SSD is mounted (example: `/mnt/ssd`):
 
@@ -70,7 +78,7 @@ An always-writing database will wear out a microSD card. After the SSD is mounte
 
 If you already have data in `backend/data/postgres`, copy that folder onto the SSD first.
 
-## 5. Keep it running
+## 6. Keep it running
 
 ```bash
 docker compose ps
@@ -91,7 +99,7 @@ Nightly backup (add to `crontab -e` on the Pi):
 
 The container name may be `backend-postgres-1` or `candybaby-postgres-1`. Check with `docker compose ps`.
 
-## 6. Useful teacher API
+## 7. Useful teacher API
 
 | Action | Request |
 | --- | --- |
@@ -106,7 +114,7 @@ The container name may be `backend-postgres-1` or `candybaby-postgres-1`. Check 
 
 Event template ids include `fiz_earnings_beat`, `coco_miss`, `gum_launch`, `krsp_recall`, `cocoa_shock`, `halloween_demand`, `soda_tax`, `sugar_rally`, `sugar_crash`, `shk_expansion`.
 
-## 7. Later: expose beyond your house
+## 8. Later: expose beyond your house
 
 Do not port-forward 3000 to the public internet. Use a Cloudflare Tunnel or Tailscale Funnel when you want phones off the school Wi-Fi to reach the Pi.
 

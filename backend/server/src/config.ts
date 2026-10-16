@@ -20,4 +20,7 @@ export const config = {
   eventChancePerTick: Number(process.env.EVENT_CHANCE_PER_TICK ?? 0.08),
   startingSugarCoins: Number(process.env.STARTING_SUGAR_COINS ?? 1000),
   circuitBreaker: Number(process.env.CIRCUIT_BREAKER ?? 0.05),
+  serverType: (process.env.SERVER_TYPE ?? "public") as "public" | "private",
+  privateImpactPerShare: Number(process.env.PRIVATE_IMPACT_PER_SHARE ?? 0.005),
+  publicImpactPerShare: Number(process.env.PUBLIC_IMPACT_PER_SHARE ?? 0.0005),
 };

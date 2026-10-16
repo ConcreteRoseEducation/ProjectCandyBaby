@@ -4,9 +4,8 @@ import android.app.Application
 import androidx.room.Room
 import com.example.projectcandybaby.data.db.CandyBabyDatabase
 import com.example.projectcandybaby.data.repository.AuthRepository
-import com.example.projectcandybaby.data.repository.FirestoreMarketRepository
+import com.example.projectcandybaby.data.repository.PiMarketRepository
 import com.example.projectcandybaby.data.repository.UserPreferencesRepository
-import com.example.projectcandybaby.logic.MarketEngine
 
 class CandyBabyApplication : Application() {
     val database by lazy {
@@ -16,6 +15,5 @@ class CandyBabyApplication : Application() {
     }
     val userPrefs by lazy { UserPreferencesRepository(this) }
     val authRepository by lazy { AuthRepository() }
-    val firestoreMarketRepository by lazy { FirestoreMarketRepository() }
-    val marketEngine by lazy { MarketEngine() }
+    val piMarketRepository by lazy { PiMarketRepository(authRepository) }
 }
