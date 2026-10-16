@@ -71,7 +71,9 @@
     <div class="row">
       <section class="card">
         <h2>Live stocks (<span id="stockCount">0</span>)</h2>
-        <input id="stockSearch" placeholder="Search symbol or name..." style="margin-bottom: 12px;" />
+        <label for="stockSearch">Search Stocks
+          <input id="stockSearch" placeholder="Search symbol or name..." style="margin-bottom: 12px;" />
+        </label>
         <div style="max-height: 480px; overflow-y: auto;">
           <table>
             <thead><tr><th>Symbol</th><th>Price</th><th>Sector</th></tr></thead>
@@ -82,7 +84,9 @@
 
       <section class="card">
         <h2>Fire Event Template</h2>
-        <select id="templates"></select>
+        <label for="templates">Preset Template
+          <select id="templates"></select>
+        </label>
         <button id="fire">Trigger Preset Event</button>
         <hr style="border-color: #4a3156; margin: 16px 0;" />
 
@@ -298,13 +302,15 @@
     const socket = new WebSocket(`${proto}://${location.host}/ws`);
     socket.onmessage = (event) => {
       const payload = JSON.parse(event.data);
-      if (payload.type === "tick") {
-        const body = document.getElementById("stocks");
-        body.innerHTML = payload.stocks.map((s) => {
-          const cls = s.changePct >= 0 ? "up" : "down";
-          const sign = s.changePct >= 0 ? "+" : "";
-          return `<tr><td>${s.symbol}<br><span class="muted">${s.name}</span></td><td>${s.currentPrice.toFixed(2)} SC</td><td class="${cls}">${sign}${s.changePct.toFixed(2)}%</td></tr>`;
-        }).join("");
+      if (payload.type === "tick" && Array.isArray(payload.stocks)) {
+        payload.stocks.forEach((updatedStock) => {
+          const match = allStocks.find((item) => item.symbol === updatedStock.symbol);
+          if (match) {
+            match.currentPrice = updatedStock.currentPrice;
+            match.changePct = updatedStock.changePct;
+          }
+        });
+        renderStocksTable();
       }
       if (payload.type === "event") refreshEvents();
     };

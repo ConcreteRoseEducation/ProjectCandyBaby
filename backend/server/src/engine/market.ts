@@ -2,7 +2,7 @@ import { PoolClient } from "pg";
 import { config } from "../config";
 import { pool } from "../db/client";
 import { StockRow } from "../types";
-import { affectedStockIds, eventDeltaThisTick, loadActiveEvents, maybeFireRandomEvent, notifyPayload } from "./events";
+import { affectedStockIds, broadcastMarketTick, eventDeltaThisTick, loadActiveEvents, maybeFireRandomEvent, notifyPayload } from "./events";
 
 function gaussian(): number {
   let u = 0;
@@ -229,7 +229,7 @@ export async function tickMarket(): Promise<void> {
     await snapshotPortfolios(client, now);
     await client.query("COMMIT");
 
-    await notifyPayload("market_tick", { type: "tick", stocks: updates, at: now.toISOString() });
+    await broadcastMarketTick(updates, now.toISOString());
     if (maybeEvent) {
       await notifyPayload("market_event", { type: "event", event: maybeEvent });
     }

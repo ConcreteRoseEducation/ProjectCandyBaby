@@ -197,3 +197,25 @@ export async function getTemplateCatalog() {
 export async function notifyPayload(channel: string, payload: unknown): Promise<void> {
   await query(`SELECT pg_notify($1, $2)`, [channel, JSON.stringify(payload)]);
 }
+
+export async function broadcastMarketTick(
+  updates: Array<{
+    symbol: string;
+    name: string;
+    sector: string;
+    currentPrice: number;
+    previousPrice: number;
+    changePct: number;
+  }>,
+  at: string,
+): Promise<void> {
+  const chunkSize = 40;
+  for (let i = 0; i < updates.length; i += chunkSize) {
+    const chunk = updates.slice(i, i + chunkSize);
+    await notifyPayload("market_tick", {
+      type: "tick",
+      stocks: chunk,
+      at,
+    });
+  }
+}
