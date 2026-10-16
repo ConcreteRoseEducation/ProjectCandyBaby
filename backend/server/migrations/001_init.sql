@@ -1,12 +1,17 @@
-CREATE EXTENSION IF NOT EXISTS timescaledb;
+DO $$
+BEGIN
+    CREATE EXTENSION IF NOT EXISTS timescaledb;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'TimescaleDB extension not available, continuing with standard PostgreSQL';
+END $$;
 
-CREATE TABLE sectors (
+CREATE TABLE IF NOT EXISTS sectors (
     id SERIAL PRIMARY KEY,
     key TEXT UNIQUE NOT NULL,
     display_name TEXT NOT NULL
 );
 
-CREATE TABLE stocks (
+CREATE TABLE IF NOT EXISTS stocks (
     id SERIAL PRIMARY KEY,
     symbol TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
@@ -19,7 +24,7 @@ CREATE TABLE stocks (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     firebase_uid TEXT UNIQUE NOT NULL,
     display_name TEXT,
@@ -27,18 +32,23 @@ CREATE TABLE users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE price_ticks (
+CREATE TABLE IF NOT EXISTS price_ticks (
     stock_id INTEGER NOT NULL REFERENCES stocks(id),
     ts TIMESTAMPTZ NOT NULL,
     price DOUBLE PRECISION NOT NULL,
     volume DOUBLE PRECISION NOT NULL DEFAULT 0
 );
 
-SELECT create_hypertable('price_ticks', 'ts', if_not_exists => TRUE);
+DO $$
+BEGIN
+    PERFORM create_hypertable('price_ticks', 'ts', if_not_exists => TRUE);
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Hypertable creation for price_ticks skipped';
+END $$;
 
-CREATE INDEX price_ticks_stock_ts_idx ON price_ticks (stock_id, ts DESC);
+CREATE INDEX IF NOT EXISTS price_ticks_stock_ts_idx ON price_ticks (stock_id, ts DESC);
 
-CREATE TABLE price_candles (
+CREATE TABLE IF NOT EXISTS price_candles (
     stock_id INTEGER NOT NULL REFERENCES stocks(id),
     bucket_start TIMESTAMPTZ NOT NULL,
     timeframe TEXT NOT NULL,
@@ -50,7 +60,7 @@ CREATE TABLE price_candles (
     PRIMARY KEY (stock_id, timeframe, bucket_start)
 );
 
-CREATE TABLE events (
+CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
     type TEXT NOT NULL,
     scope TEXT NOT NULL,
@@ -65,9 +75,9 @@ CREATE TABLE events (
     created_by TEXT NOT NULL DEFAULT 'system'
 );
 
-CREATE INDEX events_starts_at_idx ON events (starts_at DESC);
+CREATE INDEX IF NOT EXISTS events_starts_at_idx ON events (starts_at DESC);
 
-CREATE TABLE event_effects (
+CREATE TABLE IF NOT EXISTS event_effects (
     id SERIAL PRIMARY KEY,
     event_id INTEGER NOT NULL REFERENCES events(id),
     stock_id INTEGER NOT NULL REFERENCES stocks(id),
@@ -75,7 +85,7 @@ CREATE TABLE event_effects (
     price_delta DOUBLE PRECISION NOT NULL
 );
 
-CREATE TABLE holdings (
+CREATE TABLE IF NOT EXISTS holdings (
     user_id INTEGER NOT NULL REFERENCES users(id),
     stock_id INTEGER NOT NULL REFERENCES stocks(id),
     quantity INTEGER NOT NULL,
@@ -83,7 +93,7 @@ CREATE TABLE holdings (
     PRIMARY KEY (user_id, stock_id)
 );
 
-CREATE TABLE transactions (
+CREATE TABLE IF NOT EXISTS transactions (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),
     stock_id INTEGER NOT NULL REFERENCES stocks(id),
@@ -93,42 +103,47 @@ CREATE TABLE transactions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX transactions_user_created_idx ON transactions (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS transactions_user_created_idx ON transactions (user_id, created_at DESC);
 
-CREATE TABLE portfolio_snapshots (
+CREATE TABLE IF NOT EXISTS portfolio_snapshots (
     user_id INTEGER NOT NULL REFERENCES users(id),
     ts TIMESTAMPTZ NOT NULL,
     total_value DOUBLE PRECISION NOT NULL
 );
 
-SELECT create_hypertable('portfolio_snapshots', 'ts', if_not_exists => TRUE);
+DO $$
+BEGIN
+    PERFORM create_hypertable('portfolio_snapshots', 'ts', if_not_exists => TRUE);
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Hypertable creation for portfolio_snapshots skipped';
+END $$;
 
-CREATE TABLE statistics_cache (
+CREATE TABLE IF NOT EXISTS statistics_cache (
     key TEXT PRIMARY KEY,
     payload JSONB NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE classes (
+CREATE TABLE IF NOT EXISTS classes (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE class_members (
+CREATE TABLE IF NOT EXISTS class_members (
     class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     PRIMARY KEY (class_id, user_id)
 );
 
-CREATE TABLE market_state (
+CREATE TABLE IF NOT EXISTS market_state (
     id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
     market_factor DOUBLE PRECISION NOT NULL DEFAULT 0,
     global_volatility DOUBLE PRECISION NOT NULL DEFAULT 1.0,
     last_tick_at TIMESTAMPTZ
 );
 
-CREATE TABLE sector_state (
+CREATE TABLE IF NOT EXISTS sector_state (
     sector_id INTEGER PRIMARY KEY REFERENCES sectors(id),
     factor DOUBLE PRECISION NOT NULL DEFAULT 0,
     volatility DOUBLE PRECISION NOT NULL DEFAULT 0.015

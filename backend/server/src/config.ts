@@ -12,7 +12,7 @@ function required(name: string, fallback?: string): string {
 
 export const config = {
   port: Number(process.env.PORT ?? 3000),
-  databaseUrl: required("DATABASE_URL", "postgres://candybaby:candybaby@localhost:5432/candybaby"),
+  databaseUrl: required("DATABASE_URL", "postgresql://postgres:1Take2legs34@db.utndncqonkdexhxbrzua.supabase.co:5432/postgres"),
   authMode: (process.env.AUTH_MODE ?? "dev") as "dev" | "firebase",
   adminToken: process.env.ADMIN_TOKEN ?? "changeme",
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? "",
