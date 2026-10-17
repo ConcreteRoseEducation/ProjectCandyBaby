@@ -13,7 +13,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.projectcandybaby"
+        applicationId = "com.sugarmarket.app"
         minSdk = 24
         targetSdk = 37
         versionCode = 1
@@ -21,7 +21,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // LAN address of the classroom Pi. Change this if DHCP gives the Pi a new IP.
-        buildConfigField("String", "MARKET_BASE_URL", "\"http://192.168.1.120:3000\"")
+        buildConfigField("String", "MARKET_BASE_URL", "\"https://overcome-propecia-guru-ecommerce.trycloudflare.com\"")
     }
 
     buildTypes {
@@ -61,6 +61,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
+    implementation(libs.play.services.auth)
     implementation(libs.firebase.firestore)
     implementation(libs.vico.compose.m3)
     implementation(libs.vico.compose)

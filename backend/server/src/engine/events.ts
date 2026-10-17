@@ -195,7 +195,12 @@ export async function getTemplateCatalog() {
 }
 
 export async function notifyPayload(channel: string, payload: unknown): Promise<void> {
-  await query(`SELECT pg_notify($1, $2)`, [channel, JSON.stringify(payload)]);
+  const json = JSON.stringify(payload);
+  if (json.length > 7500) {
+    console.warn(`[notifyPayload] Payload string for ${channel} exceeds 7500 chars (${json.length} bytes), skipping pg_notify`);
+    return;
+  }
+  await query(`SELECT pg_notify($1, $2)`, [channel, json]);
 }
 
 export async function broadcastMarketTick(

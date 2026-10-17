@@ -162,6 +162,13 @@ export async function tickMarket(): Promise<void> {
     );
 
     const now = new Date();
+    const minutesOfDay = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const dayAngle = (minutesOfDay / 1440) * 2 * Math.PI;
+    const dayOfYear = Math.floor(now.getTime() / 86400000);
+
+    // Intraday trading session volatility multiplier (U-shaped volatility curve across the day)
+    const intradayVolMultiplier = 1.0 + 0.35 * Math.cos(dayAngle * 2);
+
     const updates: Array<{
       symbol: string;
       name: string;
@@ -172,9 +179,22 @@ export async function tickMarket(): Promise<void> {
     }> = [];
 
     for (const stock of stocks.rows) {
-      const idioShock = gaussian() * stock.volatility * market.global_volatility;
+      // 1. Unique daily trend drift per stock (guarantees no stock ends the day at the exact same price)
+      const stockTrendSeed = (stock.id * 10007 + dayOfYear * 1337) % 10000;
+      const dailyDrift = ((stockTrendSeed / 5000.0) - 1.0) * 0.0012; // persistent daily trend bias (-0.12% to +0.12% per tick)
+
+      // 2. Diurnal intraday wave (multi-hour cyclical swings unique per stock)
+      const diurnalWave = Math.sin(dayAngle * 2 + (stock.id * 1.3)) * 0.0015;
+
+      // 3. Dynamic base_price drift (anchor shifts slowly with price trend so mean reversion doesn't lock prices to starting point)
+      const basePriceDrift = 0.005 * (stock.current_price - stock.base_price);
+      const newBasePrice = Math.max(0.01, stock.base_price + basePriceDrift);
+      const meanReversion = 0.003 * ((newBasePrice - stock.current_price) / newBasePrice);
+
+      // 4. Company-specific Gaussian shock with session volatility regime
+      const idioShock = gaussian() * stock.volatility * market.global_volatility * intradayVolMultiplier;
       const nextVol = clamp(0.85 * stock.volatility + 0.15 * Math.abs(idioShock) + 0.004, 0.008, 0.06);
-      const meanReversion = 0.015 * ((stock.base_price - stock.current_price) / stock.base_price);
+
       const sectorFactor = sectorShockById.get(stock.sector_id) ?? 0;
       const eventDelta = eventDeltaByStock.get(stock.id) ?? 0;
 
@@ -185,7 +205,7 @@ export async function tickMarket(): Promise<void> {
       const orderFlowImpact = netOrderVolume * impactMultiplier;
 
       const change = clamp(
-        nextMarketFactor + sectorFactor + idioShock + meanReversion + eventDelta + orderFlowImpact,
+        nextMarketFactor + sectorFactor + idioShock + dailyDrift + diurnalWave + meanReversion + eventDelta + orderFlowImpact,
         -config.circuitBreaker,
         config.circuitBreaker,
       );
@@ -193,8 +213,8 @@ export async function tickMarket(): Promise<void> {
       const volume = Math.max(10, 100 + gaussian() * 25 + Math.abs(change) * 800 + pendingBuy + pendingSell);
 
       await client.query(
-        "UPDATE stocks SET current_price = $1, volatility = $2, pending_buy_volume = 0, pending_sell_volume = 0 WHERE id = $3",
-        [newPrice, nextVol, stock.id],
+        "UPDATE stocks SET current_price = $1, base_price = $2, volatility = $3, pending_buy_volume = 0, pending_sell_volume = 0 WHERE id = $4",
+        [newPrice, newBasePrice, nextVol, stock.id],
       );
       await client.query(
         "INSERT INTO price_ticks (stock_id, ts, price, volume) VALUES ($1, $2, $3, $4)",
