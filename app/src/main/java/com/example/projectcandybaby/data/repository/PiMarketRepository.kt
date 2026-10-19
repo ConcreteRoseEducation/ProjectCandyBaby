@@ -3,7 +3,9 @@ package com.example.projectcandybaby.data.repository
 import android.util.Log
 import com.example.projectcandybaby.BuildConfig
 import com.example.projectcandybaby.data.model.Holding
+import com.example.projectcandybaby.data.model.LeaderboardEntry
 import com.example.projectcandybaby.data.model.MarketEvent
+import com.example.projectcandybaby.data.model.UserProfile
 import com.example.projectcandybaby.data.model.Sector
 import com.example.projectcandybaby.data.model.StockTicker
 import kotlinx.coroutines.CompletableDeferred
@@ -137,6 +139,63 @@ class PiMarketRepository(
             )
         }
         coins to holdings
+    }
+
+    suspend fun fetchProfile(): UserProfile = withContext(Dispatchers.IO) {
+        val json = authorizedGet("/profile")
+        val obj = json.getJSONObject("profile")
+        UserProfile(
+            id = obj.optLong("id"),
+            displayName = obj.optString("displayName", ""),
+            username = obj.optString("username").ifBlank { null },
+            fullName = obj.optString("fullName").ifBlank { null },
+            age = if (obj.has("age") && !obj.isNull("age")) obj.getInt("age") else null,
+            isChildAccount = obj.optBoolean("isChildAccount", false),
+            sugarCoins = obj.optDouble("sugarCoins", 1000.0)
+        )
+    }
+
+    suspend fun updateProfile(username: String?, fullName: String?, age: Int?): UserProfile = withContext(Dispatchers.IO) {
+        val body = JSONObject().apply {
+            if (!username.isNullOrBlank()) put("username", username.trim())
+            if (!fullName.isNullOrBlank()) put("fullName", fullName.trim())
+            if (age != null) put("age", age)
+        }.toString().toRequestBody(JSON)
+
+        val json = authorizedRequest(
+            Request.Builder()
+                .url("${BuildConfig.MARKET_BASE_URL}/profile")
+                .post(body)
+        )
+        val obj = json.getJSONObject("profile")
+        UserProfile(
+            id = obj.optLong("id"),
+            displayName = obj.optString("displayName", ""),
+            username = obj.optString("username").ifBlank { null },
+            fullName = obj.optString("fullName").ifBlank { null },
+            age = if (obj.has("age") && !obj.isNull("age")) obj.getInt("age") else null,
+            isChildAccount = obj.optBoolean("isChildAccount", false),
+            sugarCoins = obj.optDouble("sugarCoins", 1000.0)
+        )
+    }
+
+    suspend fun fetchLeaderboard(): List<LeaderboardEntry> = withContext(Dispatchers.IO) {
+        try {
+            val json = publicGet("/leaderboard")
+            val array = json.getJSONArray("leaderboard")
+            var currentRank = 1
+            array.mapObjects { item ->
+                LeaderboardEntry(
+                    rank = currentRank++,
+                    displayName = item.optString("display_name", "Anonymous Trader"),
+                    totalValue = item.optDouble("total_value", item.optDouble("sugar_coins", 1000.0)),
+                    sugarCoins = item.optDouble("sugar_coins", 1000.0)
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch leaderboard", e)
+            emptyList()
+        }
     }
 
     suspend fun fetchMarketEvents(): List<MarketEvent> = withContext(Dispatchers.IO) {

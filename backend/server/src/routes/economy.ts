@@ -1,12 +1,27 @@
 import { Router } from "express";
 import { pool, withTransaction } from "../db/client";
 import { AuthedRequest, requireAuth } from "../auth";
-import { TradeType } from "../types";
+import { TradeType, UserRow } from "../types";
 import { config } from "../config";
 import { upsertCandle } from "../engine/market";
 import { notifyPayload } from "../engine/events";
 
 export const economyRouter = Router();
+
+function sanitizeProfile(row: UserRow) {
+  const isMinor = row.is_child_account || (row.age != null && row.age < 13);
+  return {
+    id: row.id,
+    displayName: row.display_name,
+    username: row.username,
+    fullName: row.full_name,
+    // Do NOT expose listed age if under 13 (signify minor's account instead)
+    age: isMinor ? null : row.age,
+    isChildAccount: isMinor,
+    accountType: isMinor ? "minor" : "standard",
+    sugarCoins: Number(row.sugar_coins),
+  };
+}
 
 economyRouter.get("/portfolio", requireAuth, async (req: AuthedRequest, res) => {
   const user = req.user!;
@@ -26,15 +41,58 @@ economyRouter.get("/portfolio", requireAuth, async (req: AuthedRequest, res) => 
     0,
   );
   res.json({
-    user: {
-      id: user.id,
-      displayName: user.display_name,
-      sugarCoins: Number(user.sugar_coins),
-    },
+    user: sanitizeProfile(user),
     holdings: holdings.rows,
     holdingsValue,
     totalValue: Number(user.sugar_coins) + holdingsValue,
   });
+});
+
+economyRouter.get(["/profile", "/users/profile"], requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  res.json({
+    profile: sanitizeProfile(user),
+  });
+});
+
+economyRouter.post(["/profile", "/users/profile", "/users"], requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  const username = req.body?.username ? String(req.body.username).trim() : null;
+  const fullName = req.body?.fullName ? String(req.body.fullName).trim() : null;
+  const age = req.body?.age != null && req.body?.age !== "" ? Number(req.body.age) : null;
+
+  if (username && !/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+    res.status(400).json({ error: "Username must be 3-20 alphanumeric characters or underscores" });
+    return;
+  }
+
+  if (age != null && (!Number.isInteger(age) || age < 5 || age > 120)) {
+    res.status(400).json({ error: "Age must be between 5 and 120" });
+    return;
+  }
+
+  const isChildAccount = age != null ? age < 13 : false;
+  const displayName = username || fullName || user.display_name;
+
+  try {
+    const updated = await pool.query<UserRow>(
+      `UPDATE users
+       SET username = COALESCE($1, username),
+           full_name = COALESCE($2, full_name),
+           age = COALESCE($3, age),
+           is_child_account = $4,
+           display_name = COALESCE($5, display_name)
+       WHERE id = $6
+       RETURNING id, firebase_uid, display_name, username, full_name, age, is_child_account, sugar_coins`,
+      [username, fullName, age, isChildAccount, displayName, user.id],
+    );
+
+    res.json({
+      profile: sanitizeProfile(updated.rows[0]),
+    });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Profile update failed" });
+  }
 });
 
 economyRouter.post("/trades", requireAuth, async (req: AuthedRequest, res) => {

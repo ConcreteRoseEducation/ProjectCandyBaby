@@ -21,7 +21,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // LAN address of the classroom Pi. Change this if DHCP gives the Pi a new IP.
-        buildConfigField("String", "MARKET_BASE_URL", "\"https://overcome-propecia-guru-ecommerce.trycloudflare.com\"")
+        buildConfigField("String", "MARKET_BASE_URL", "\"https://springs-slot-generic-nov.trycloudflare.com\"")
     }
 
     buildTypes {
@@ -39,9 +39,10 @@ android {
         compose = true
         buildConfig = true
     }
-    room {
-        schemaDirectory("$projectDir/schemas")
-    }
+}
+
+room {
+    schemaDirectory("$projectDir/schemas")
 }
 
 dependencies {

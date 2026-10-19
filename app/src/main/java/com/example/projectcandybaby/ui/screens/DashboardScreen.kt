@@ -29,6 +29,7 @@ fun DashboardScreen(
     userName: String? = null,
     onSignInClick: () -> Unit = {},
     onSignOutClick: () -> Unit = {},
+    onLeaderboardClick: () -> Unit = {},
     onMarketClick: () -> Unit
 ) {
     Scaffold(
@@ -36,16 +37,20 @@ fun DashboardScreen(
             CenterAlignedTopAppBar(
                 title = { Text("Sugar Market Dashboard") },
                 actions = {
+                    IconButton(onClick = onLeaderboardClick) {
+                        Text("🏆")
+                    }
+
                     Surface(
                         shape = MaterialTheme.shapes.extraSmall,
                         color = if (serverType == "private") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-                        modifier = Modifier.padding(end = 8.dp)
+                        modifier = Modifier.padding(end = 4.dp)
                     ) {
                         Text(
                             text = if (serverType == "private") "🔒 Private" else "🌐 Public",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
                         )
                     }
 
@@ -66,8 +71,16 @@ fun DashboardScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = onMarketClick) {
-                Text("Go to Market 🍬")
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SmallFloatingActionButton(onClick = onLeaderboardClick) {
+                    Text("🏆")
+                }
+                ExtendedFloatingActionButton(onClick = onMarketClick) {
+                    Text("Go to Market 🍬")
+                }
             }
         }
     ) { padding ->

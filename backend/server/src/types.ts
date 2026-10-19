@@ -37,6 +37,10 @@ export type UserRow = {
   id: number;
   firebase_uid: string;
   display_name: string | null;
+  username: string | null;
+  full_name: string | null;
+  age: number | null;
+  is_child_account: boolean;
   sugar_coins: number;
 };
 

@@ -22,7 +22,7 @@ async function initFirebase(): Promise<void> {
 
 export async function ensureUser(firebaseUid: string, displayName?: string | null): Promise<UserRow> {
   const existing = await queryOne<UserRow>(
-    "SELECT id, firebase_uid, display_name, sugar_coins FROM users WHERE firebase_uid = $1",
+    "SELECT id, firebase_uid, display_name, username, full_name, age, is_child_account, sugar_coins FROM users WHERE firebase_uid = $1",
     [firebaseUid],
   );
   if (existing) {
@@ -31,7 +31,7 @@ export async function ensureUser(firebaseUid: string, displayName?: string | nul
   const created = await queryOne<UserRow>(
     `INSERT INTO users (firebase_uid, display_name, sugar_coins)
      VALUES ($1, $2, $3)
-     RETURNING id, firebase_uid, display_name, sugar_coins`,
+     RETURNING id, firebase_uid, display_name, username, full_name, age, is_child_account, sugar_coins`,
     [firebaseUid, displayName ?? firebaseUid, config.startingSugarCoins],
   );
   if (!created) {

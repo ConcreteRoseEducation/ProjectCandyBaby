@@ -5,7 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.projectcandybaby.data.db.PortfolioDao
 import com.example.projectcandybaby.data.model.Holding
+import com.example.projectcandybaby.data.model.LeaderboardEntry
 import com.example.projectcandybaby.data.model.PortfolioPoint
+import com.example.projectcandybaby.data.model.UserProfile
 import com.example.projectcandybaby.data.model.StockTicker
 import com.example.projectcandybaby.data.repository.AuthRepository
 import com.example.projectcandybaby.data.repository.PiMarketRepository
@@ -17,6 +19,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class MainViewModel(
     private val portfolioDao: PortfolioDao,
@@ -69,9 +72,56 @@ class MainViewModel(
 
     init {
         viewModelScope.launch { refreshPortfolio() }
+        viewModelScope.launch { refreshLeaderboard() }
         viewModelScope.launch {
             combine(currentUser, isBypassed) { _, _ -> }
                 .collect { refreshPortfolio() }
+        }
+    }
+
+    private val _leaderboard = MutableStateFlow<List<LeaderboardEntry>>(emptyList())
+    val leaderboard = _leaderboard.asStateFlow()
+
+    fun refreshLeaderboard() {
+        viewModelScope.launch {
+            try {
+                _leaderboard.value = piMarketRepository.fetchLeaderboard()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch leaderboard", e)
+            }
+        }
+    }
+
+    private val _userProfile = MutableStateFlow<UserProfile?>(null)
+    val userProfile = _userProfile.asStateFlow()
+
+    private val _profileError = MutableStateFlow<String?>(null)
+    val profileError = _profileError.asStateFlow()
+
+    fun refreshProfile() {
+        if (currentUser.value == null) return
+        viewModelScope.launch {
+            try {
+                val profile = piMarketRepository.fetchProfile()
+                _userProfile.value = profile
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to fetch profile", e)
+            }
+        }
+    }
+
+    fun updateUserProfile(username: String, fullName: String, age: Int, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val profile = piMarketRepository.updateProfile(username, fullName, age)
+                _userProfile.value = profile
+                _profileError.value = null
+                onComplete(true)
+            } catch (e: Exception) {
+                Log.e(TAG, "Profile update failed", e)
+                _profileError.value = e.message ?: "Failed to save profile"
+                onComplete(false)
+            }
         }
     }
 
@@ -116,32 +166,49 @@ class MainViewModel(
         _isBypassed.value = false
     }
 
+    private val _tradeStatusMessage = MutableStateFlow<String?>(null)
+    @Suppress("unused")
+    val tradeStatusMessage = _tradeStatusMessage.asStateFlow()
+
+    @Suppress("unused")
+    fun clearTradeMessage() {
+        _tradeStatusMessage.value = null
+    }
+
     fun buyStock(ticker: StockTicker, quantity: Int) {
         if (currentUser.value == null) {
-            Log.w(TAG, "Guests cannot place trades. Please sign in with Google.")
+            _tradeStatusMessage.value = "🔒 Guests cannot place trades. Please sign in with Google."
             return
         }
         viewModelScope.launch {
             try {
                 piMarketRepository.placeTrade(ticker.symbol, "BUY", quantity)
                 refreshPortfolio()
+                val totalStr = String.format(Locale.US, "%.2f", ticker.currentPrice * quantity)
+                _tradeStatusMessage.value = "✅ Purchased $quantity shares of ${ticker.symbol} ($totalStr SC)"
             } catch (error: Exception) {
                 Log.e(TAG, "Buy failed", error)
+                val msg = error.message ?: "Trade failed"
+                _tradeStatusMessage.value = "❌ $msg"
             }
         }
     }
 
     fun sellStock(ticker: StockTicker, quantity: Int) {
         if (currentUser.value == null) {
-            Log.w(TAG, "Guests cannot place trades. Please sign in with Google.")
+            _tradeStatusMessage.value = "🔒 Guests cannot place trades. Please sign in with Google."
             return
         }
         viewModelScope.launch {
             try {
                 piMarketRepository.placeTrade(ticker.symbol, "SELL", quantity)
                 refreshPortfolio()
+                val totalStr = String.format(Locale.US, "%.2f", ticker.currentPrice * quantity)
+                _tradeStatusMessage.value = "✅ Sold $quantity shares of ${ticker.symbol} ($totalStr SC)"
             } catch (error: Exception) {
                 Log.e(TAG, "Sell failed", error)
+                val msg = error.message ?: "Trade failed"
+                _tradeStatusMessage.value = "❌ $msg"
             }
         }
     }
