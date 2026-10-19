@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import com.example.projectcandybaby.data.model.MarketEvent
 import com.example.projectcandybaby.data.model.Sector
 import com.example.projectcandybaby.data.model.StockTicker
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,7 +128,25 @@ fun MarketScreen(
                     }
                 }
 
-                if (filteredStocks.isEmpty()) {
+                if (stocks.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator()
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    "Loading Sugar Market stocks...",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
+                        }
+                    }
+                } else if (filteredStocks.isEmpty()) {
                     item {
                         Box(
                             modifier = Modifier
@@ -190,15 +209,15 @@ fun MarketScreen(
 
                                     Column(horizontalAlignment = Alignment.End) {
                                         Text(
-                                            "${String.format("%.2f", stock.currentPrice)} SC",
+                                            "${String.format(Locale.US, "%.2f", stock.currentPrice)} SC",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.primary
                                         )
                                         val changeText = if (priceChangePct >= 0)
-                                            "+${String.format("%.2f", priceChangePct)}%"
+                                            "+${String.format(Locale.US, "%.2f", priceChangePct)}%"
                                         else
-                                            "${String.format("%.2f", priceChangePct)}%"
+                                            "${String.format(Locale.US, "%.2f", priceChangePct)}%"
                                         val changeColor = if (priceChangePct >= 0)
                                             MaterialTheme.colorScheme.primary
                                         else

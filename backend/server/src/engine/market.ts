@@ -275,15 +275,35 @@ async function snapshotPortfolios(client: PoolClient, ts: Date): Promise<void> {
   );
 }
 
-export async function listStocks(): Promise<StockRow[]> {
-  return (await pool.query<StockRow>(
+export async function listStocks(): Promise<Array<StockRow & { priceHistory: number[] }>> {
+  const stocks = await pool.query<StockRow>(
     `SELECT s.id, s.symbol, s.name, s.sector_id, sec.key AS sector_key, sec.display_name AS sector_name,
             s.base_price, s.current_price, s.description, s.is_active, s.volatility
      FROM stocks s
      JOIN sectors sec ON sec.id = s.sector_id
      WHERE s.is_active = TRUE
      ORDER BY s.symbol`,
-  )).rows;
+  );
+
+  const recentTicks = await pool.query<{ stock_id: number; price: number }>(
+    `SELECT stock_id, price FROM (
+       SELECT stock_id, price, ts,
+              ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY ts DESC) as rn
+       FROM price_ticks
+     ) sub WHERE rn <= 10 ORDER BY stock_id, ts ASC`,
+  );
+
+  const historyByStockId = new Map<number, number[]>();
+  for (const row of recentTicks.rows) {
+    const existing = historyByStockId.get(row.stock_id) ?? [];
+    existing.push(Number(row.price));
+    historyByStockId.set(row.stock_id, existing);
+  }
+
+  return stocks.rows.map((stock) => ({
+    ...stock,
+    priceHistory: historyByStockId.get(stock.id) ?? [stock.current_price],
+  }));
 }
 
 export async function getStock(symbol: string): Promise<StockRow | undefined> {

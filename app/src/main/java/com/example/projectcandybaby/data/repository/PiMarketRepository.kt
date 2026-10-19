@@ -10,6 +10,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -111,7 +112,7 @@ class PiMarketRepository(
                 socketRef.set(socket)
                 closed.await()
                 socketRef.set(null)
-                delay(backoff)
+                delay(backoff.milliseconds)
                 backoff = (backoff * 2).coerceAtMost(15_000L)
             }
         }
@@ -181,16 +182,7 @@ class PiMarketRepository(
         val sType = listJson.optString("serverType", "public")
         _serverType.value = sType
 
-        val stocks = listJson.getJSONArray("stocks").mapObjects { parseStock(it) }
-        stocks.map { stock ->
-            try {
-                val detail = publicGet("/stocks/${stock.symbol}")
-                stock.copy(priceHistory = detail.optJSONArray("priceHistory").toDoubleList())
-            } catch (error: Exception) {
-                Log.w(TAG, "No history for ${stock.symbol}", error)
-                stock
-            }
-        }
+        listJson.getJSONArray("stocks").mapObjects { parseStock(it) }
     }
 
     private fun websocketUrl(): String {
@@ -240,6 +232,7 @@ class PiMarketRepository(
             basePrice = item.optDouble("basePrice"),
             currentPrice = item.optDouble("currentPrice"),
             description = item.optString("description"),
+            priceHistory = item.optJSONArray("priceHistory").toDoubleList()
         )
     }
 

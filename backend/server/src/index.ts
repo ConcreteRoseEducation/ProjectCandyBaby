@@ -54,6 +54,7 @@ async function main(): Promise<void> {
         basePrice: stock.base_price,
         currentPrice: stock.current_price,
         description: stock.description,
+        priceHistory: stock.priceHistory,
       })),
     });
   });

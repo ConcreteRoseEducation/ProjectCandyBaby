@@ -14,6 +14,7 @@ import com.example.projectcandybaby.data.model.Holding
 import com.example.projectcandybaby.data.model.MarketEvent
 import com.example.projectcandybaby.ui.components.AllocationChart
 import com.example.projectcandybaby.ui.components.StockChart
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,6 +26,9 @@ fun DashboardScreen(
     profitLoss: Map<String, Double>,
     serverType: String = "public",
     marketEvents: List<MarketEvent> = emptyList(),
+    userName: String? = null,
+    onSignInClick: () -> Unit = {},
+    onSignOutClick: () -> Unit = {},
     onMarketClick: () -> Unit
 ) {
     Scaffold(
@@ -35,7 +39,7 @@ fun DashboardScreen(
                     Surface(
                         shape = MaterialTheme.shapes.extraSmall,
                         color = if (serverType == "private") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-                        modifier = Modifier.padding(end = 12.dp)
+                        modifier = Modifier.padding(end = 8.dp)
                     ) {
                         Text(
                             text = if (serverType == "private") "🔒 Private" else "🌐 Public",
@@ -43,6 +47,20 @@ fun DashboardScreen(
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
+                    }
+
+                    if (userName != null) {
+                        TextButton(onClick = onSignOutClick) {
+                            Text("Sign Out", style = MaterialTheme.typography.labelMedium)
+                        }
+                    } else {
+                        Button(
+                            onClick = onSignInClick,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Text("G Sign In", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             )
@@ -65,9 +83,30 @@ fun DashboardScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Current Balance", style = MaterialTheme.typography.labelLarge)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Current Balance", style = MaterialTheme.typography.labelLarge)
+                            if (userName != null) {
+                                Text(
+                                    "👤 $userName",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                Text(
+                                    "👤 Guest User",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            "${String.format("%.2f", sugarCoins)} SC",
+                            "${String.format(Locale.US, "%.2f", sugarCoins)} SC",
                             style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -142,7 +181,7 @@ fun DashboardScreen(
                         headlineContent = { Text(holding.symbol) },
                         supportingContent = { Text("${holding.quantity} shares") },
                         trailingContent = { 
-                            Text("Avg: ${String.format("%.2f", holding.averagePurchasePrice)} SC")
+                            Text("Avg: ${String.format(Locale.US, "%.2f", holding.averagePurchasePrice)} SC")
                         }
                     )
                 }

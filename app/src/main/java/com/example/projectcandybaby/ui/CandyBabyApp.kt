@@ -28,9 +28,11 @@ fun CandyBabyApp(viewModel: MainViewModel) {
     val serverType by viewModel.serverType.collectAsState()
     val marketEvents by viewModel.marketEvents.collectAsState()
 
+    val isGuest = currentUser == null
+
     if (currentUser == null && !isBypassed) {
         LoginScreen(
-            onSignInClick = { /* TODO: Launch Google Sign In */ },
+            onSignInClick = { viewModel.signInWithGoogleDemo() },
             onBypassClick = { viewModel.bypassAuth() }
         )
     } else if (!disclaimerAccepted) {
@@ -46,6 +48,9 @@ fun CandyBabyApp(viewModel: MainViewModel) {
                     profitLoss = profitLoss,
                     serverType = serverType,
                     marketEvents = marketEvents,
+                    userName = currentUser?.displayName,
+                    onSignInClick = { viewModel.signInWithGoogleDemo() },
+                    onSignOutClick = { viewModel.signOut() },
                     onMarketClick = { navController.navigate("market") }
                 )
             }
@@ -68,6 +73,8 @@ fun CandyBabyApp(viewModel: MainViewModel) {
                         serverType = serverType,
                         sugarCoins = sugarCoins,
                         ownedShares = ownedShares,
+                        isGuest = isGuest,
+                        onSignInClick = { viewModel.signInWithGoogleDemo() },
                         onBuy = { qty -> viewModel.buyStock(stock, qty) },
                         onSell = { qty -> viewModel.sellStock(stock, qty) },
                         onBack = { navController.popBackStack() }

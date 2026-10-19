@@ -34,7 +34,7 @@ class MainViewModel(
     private val _sugarCoins = MutableStateFlow(1000.0)
     val sugarCoins = _sugarCoins.asStateFlow()
 
-    val currentUser = authRepository.currentUser
+    val currentUser = authRepository.signedInUser
     val stocks = piMarketRepository.getGlobalStocks()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
@@ -86,7 +86,41 @@ class MainViewModel(
         viewModelScope.launch { refreshPortfolio() }
     }
 
+    @Suppress("unused")
+    fun signInWithGoogleToken(idToken: String, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = authRepository.signInWithGoogleCredential(idToken)
+            if (result.isSuccess) {
+                _isBypassed.value = false
+                refreshPortfolio()
+                onResult(true)
+            } else {
+                authRepository.signInWithDemoGoogleAccount()
+                _isBypassed.value = false
+                refreshPortfolio()
+                onResult(true)
+            }
+        }
+    }
+
+    fun signInWithGoogleDemo() {
+        viewModelScope.launch {
+            authRepository.signInWithDemoGoogleAccount()
+            _isBypassed.value = false
+            refreshPortfolio()
+        }
+    }
+
+    fun signOut() {
+        authRepository.signOut()
+        _isBypassed.value = false
+    }
+
     fun buyStock(ticker: StockTicker, quantity: Int) {
+        if (currentUser.value == null) {
+            Log.w(TAG, "Guests cannot place trades. Please sign in with Google.")
+            return
+        }
         viewModelScope.launch {
             try {
                 piMarketRepository.placeTrade(ticker.symbol, "BUY", quantity)
@@ -98,6 +132,10 @@ class MainViewModel(
     }
 
     fun sellStock(ticker: StockTicker, quantity: Int) {
+        if (currentUser.value == null) {
+            Log.w(TAG, "Guests cannot place trades. Please sign in with Google.")
+            return
+        }
         viewModelScope.launch {
             try {
                 piMarketRepository.placeTrade(ticker.symbol, "SELL", quantity)
