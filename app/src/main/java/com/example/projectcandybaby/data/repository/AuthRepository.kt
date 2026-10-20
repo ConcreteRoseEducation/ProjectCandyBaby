@@ -1,12 +1,20 @@
 package com.example.projectcandybaby.data.repository
 
+import com.example.projectcandybaby.BuildConfig
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import kotlin.coroutines.resume
 
 data class SugarUser(
@@ -17,7 +25,10 @@ data class SugarUser(
 )
 
 class AuthRepository {
+    private val httpClient = OkHttpClient.Builder().build()
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+
+    private var supabaseToken: String? = null
     
     private val _signedInUser = MutableStateFlow<SugarUser?>(
         auth.currentUser?.let {
@@ -29,7 +40,7 @@ class AuthRepository {
     init {
         auth.addAuthStateListener { firebaseAuth ->
             val user = firebaseAuth.currentUser
-            if (user != null) {
+            if (user != null && supabaseToken == null) {
                 _signedInUser.value = SugarUser(
                     user.uid,
                     user.displayName ?: user.email ?: "Google Trader",
@@ -40,8 +51,82 @@ class AuthRepository {
     }
 
     fun signOut() {
+        supabaseToken = null
         runCatching { auth.signOut() }
         _signedInUser.value = null
+    }
+
+    suspend fun signUpWithSupabase(email: String, password: String, displayName: String): Result<SugarUser> = withContext(Dispatchers.IO) {
+        try {
+            val json = JSONObject()
+                .put("email", email)
+                .put("password", password)
+                .put("displayName", displayName)
+
+            val request = Request.Builder()
+                .url("${BuildConfig.MARKET_BASE_URL}/auth/signup")
+                .post(json.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string().orEmpty()
+                val resObj = JSONObject(bodyStr)
+                if (!response.isSuccessful) {
+                    val errMsg = resObj.optString("error", "Signup failed (${response.code})")
+                    return@withContext Result.failure(Exception(errMsg))
+                }
+                val token = resObj.optString("token", "")
+                if (token.isNotBlank()) {
+                    supabaseToken = token
+                }
+                val userObj = resObj.optJSONObject("user")
+                val sugarUser = SugarUser(
+                    uid = userObj?.optString("id") ?: resObj.optJSONObject("supabaseUser")?.optString("id") ?: email,
+                    displayName = userObj?.optString("displayName") ?: displayName,
+                    email = email
+                )
+                _signedInUser.value = sugarUser
+                Result.success(sugarUser)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun signInWithSupabase(email: String, password: String): Result<SugarUser> = withContext(Dispatchers.IO) {
+        try {
+            val json = JSONObject()
+                .put("email", email)
+                .put("password", password)
+
+            val request = Request.Builder()
+                .url("${BuildConfig.MARKET_BASE_URL}/auth/login")
+                .post(json.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string().orEmpty()
+                val resObj = JSONObject(bodyStr)
+                if (!response.isSuccessful) {
+                    val errMsg = resObj.optString("error", "Login failed (${response.code})")
+                    return@withContext Result.failure(Exception(errMsg))
+                }
+                val token = resObj.optString("token", "")
+                if (token.isNotBlank()) {
+                    supabaseToken = token
+                }
+                val userObj = resObj.optJSONObject("user")
+                val sugarUser = SugarUser(
+                    uid = userObj?.optString("id") ?: resObj.optJSONObject("supabaseUser")?.optString("id") ?: email,
+                    displayName = userObj?.optString("displayName") ?: email.substringBefore("@"),
+                    email = email
+                )
+                _signedInUser.value = sugarUser
+                Result.success(sugarUser)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun signInWithGoogleCredential(idToken: String): Result<SugarUser> = suspendCancellableCoroutine { continuation ->
@@ -75,8 +160,8 @@ class AuthRepository {
     }
 
     /**
-     * Headers for the Sugar Market API. Guest mode uses X-Dev-User = guest.
-     * A signed-in user sends their UID and Bearer token.
+     * Headers for the Sugar Market API.
+     * A signed-in user sends their UID and Supabase / Bearer token.
      */
     suspend fun marketHeaders(): Map<String, String> {
         val user = _signedInUser.value
@@ -90,6 +175,10 @@ class AuthRepository {
             "X-Dev-User" to user.uid,
             "X-Dev-Name" to user.displayName,
         )
+        if (!supabaseToken.isNullOrBlank()) {
+            headers["Authorization"] = "Bearer $supabaseToken"
+            return headers
+        }
         val firebaseUser = auth.currentUser
         if (firebaseUser != null) {
             val token = firebaseUser.fetchIdToken()

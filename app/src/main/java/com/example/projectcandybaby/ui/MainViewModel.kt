@@ -161,6 +161,32 @@ class MainViewModel(
         }
     }
 
+    fun signUpWithSupabase(email: String, password: String, displayName: String, onResult: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            val result = authRepository.signUpWithSupabase(email, password, displayName)
+            if (result.isSuccess) {
+                _isBypassed.value = false
+                refreshPortfolio()
+                onResult(true, null)
+            } else {
+                onResult(false, result.exceptionOrNull()?.message ?: "Signup failed")
+            }
+        }
+    }
+
+    fun signInWithSupabase(email: String, password: String, onResult: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            val result = authRepository.signInWithSupabase(email, password)
+            if (result.isSuccess) {
+                _isBypassed.value = false
+                refreshPortfolio()
+                onResult(true, null)
+            } else {
+                onResult(false, result.exceptionOrNull()?.message ?: "Login failed")
+            }
+        }
+    }
+
     fun signOut() {
         authRepository.signOut()
         _isBypassed.value = false

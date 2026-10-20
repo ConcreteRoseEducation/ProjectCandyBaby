@@ -13,7 +13,9 @@ function required(name: string, fallback?: string): string {
 export const config = {
   port: Number(process.env.PORT ?? 3000),
   databaseUrl: required("DATABASE_URL", "postgresql://postgres:1Take2legs34@db.utndncqonkdexhxbrzua.supabase.co:5432/postgres"),
-  authMode: (process.env.AUTH_MODE ?? "dev") as "dev" | "firebase",
+  supabaseUrl: process.env.SUPABASE_URL ?? "https://utndncqonkdexhxbrzua.supabase.co",
+  supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0bmRuY3FvbmtkZXhoeGJyenVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg1MDM2MDAsImV4cCI6MjA1NDA3OTYwMH0.placeholder",
+  authMode: (process.env.AUTH_MODE ?? "supabase") as "dev" | "firebase" | "supabase",
   adminToken: process.env.ADMIN_TOKEN ?? "changeme",
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? "",
   tickIntervalMs: Number(process.env.TICK_INTERVAL_MS ?? 30_000),

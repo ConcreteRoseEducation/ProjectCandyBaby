@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { config } from "./config";
 import { queryOne } from "./db/client";
 import { UserRow } from "./types";
@@ -6,6 +7,16 @@ import { UserRow } from "./types";
 export type AuthedRequest = Request & { user?: UserRow };
 
 let firebaseReady = false;
+let supabaseClient: SupabaseClient | null = null;
+
+export function getSupabaseClient(): SupabaseClient {
+  if (!supabaseClient) {
+    supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+      auth: { persistSession: false },
+    });
+  }
+  return supabaseClient;
+}
 
 async function initFirebase(): Promise<void> {
   if (firebaseReady || config.authMode !== "firebase") {
@@ -73,19 +84,47 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
 }
 
 async function resolveUser(req: Request): Promise<UserRow | undefined> {
-  if (config.authMode === "dev") {
-    const devUser = req.header("x-dev-user") ?? "guest";
-    const displayName = req.header("x-dev-name") ?? devUser;
-    return ensureUser(`dev:${devUser}`, displayName);
-  }
-
   const header = req.header("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  if (!token) {
-    return undefined;
+
+  if (token) {
+    // 1. Validate Supabase Auth token
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      if (user && !error) {
+        const displayName =
+          user.user_metadata?.display_name ||
+          user.user_metadata?.full_name ||
+          user.email?.split("@")[0] ||
+          user.id;
+        return ensureUser(user.id, displayName);
+      }
+    } catch {
+      // Ignore and fallback to Firebase if token wasn't Supabase
+    }
+
+    // 2. Validate Firebase token if configured
+    if (config.authMode === "firebase" || config.firebaseProjectId) {
+      try {
+        await initFirebase();
+        const admin = await import("firebase-admin");
+        const decoded = await admin.auth().verifyIdToken(token);
+        return ensureUser(decoded.uid, decoded.name ?? decoded.email ?? decoded.uid);
+      } catch {
+        return undefined;
+      }
+    }
   }
-  await initFirebase();
-  const admin = await import("firebase-admin");
-  const decoded = await admin.auth().verifyIdToken(token);
-  return ensureUser(decoded.uid, decoded.name ?? decoded.email ?? decoded.uid);
+
+  // 3. Fallback to dev header if present
+  if (config.authMode === "dev") {
+    const devUser = req.header("x-dev-user");
+    if (devUser) {
+      const displayName = req.header("x-dev-name") ?? devUser;
+      return ensureUser(`dev:${devUser}`, displayName);
+    }
+  }
+
+  return undefined;
 }

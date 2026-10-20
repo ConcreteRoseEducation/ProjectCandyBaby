@@ -23,7 +23,6 @@ import com.example.projectcandybaby.ui.screens.MarketScreen
 fun CandyBabyApp(viewModel: MainViewModel) {
     val navController = rememberNavController()
     val currentUser by viewModel.currentUser.collectAsState()
-    val isBypassed by viewModel.isBypassed.collectAsState()
     val disclaimerAccepted by viewModel.disclaimerAccepted.collectAsState()
     val sugarCoins by viewModel.sugarCoins.collectAsState()
     val holdings by viewModel.holdings.collectAsState()
@@ -72,10 +71,15 @@ fun CandyBabyApp(viewModel: MainViewModel) {
         )
     }
 
-    if (currentUser == null && !isBypassed) {
+    if (currentUser == null) {
         LoginScreen(
             onSignInClick = { viewModel.signInWithGoogleDemo() },
-            onBypassClick = { viewModel.bypassAuth() }
+            onSupabaseSignIn = { email, password, onResult ->
+                viewModel.signInWithSupabase(email, password, onResult)
+            },
+            onSupabaseSignUp = { email, password, name, onResult ->
+                viewModel.signUpWithSupabase(email, password, name, onResult)
+            }
         )
     } else if (!disclaimerAccepted) {
         DisclaimerScreen(onAccept = { viewModel.acceptDisclaimer() })

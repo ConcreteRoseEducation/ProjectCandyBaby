@@ -9,6 +9,7 @@ import { migrate } from "./db/migrate";
 import { fireCustomEvent, fireTemplateById, getTemplateCatalog, listEvents, notifyPayload } from "./engine/events";
 import { getCandles, getRecentTicks, getStock, getServerType, setServerType, listStocks, seedPriceHistoryIfEmpty, tickMarket } from "./engine/market";
 import { attachRealtime } from "./realtime";
+import { authRouter } from "./routes/auth";
 import { economyRouter } from "./routes/economy";
 
 async function main(): Promise<void> {
@@ -178,6 +179,7 @@ async function main(): Promise<void> {
     }
   });
 
+  app.use(authRouter);
   app.use(economyRouter);
 
   // Background ticker loop (ticks every config.tickIntervalMs regardless of trades)

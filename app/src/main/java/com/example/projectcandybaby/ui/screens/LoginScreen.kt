@@ -5,7 +5,10 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,19 +19,32 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.random.Random
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     onSignInClick: () -> Unit,
-    onBypassClick: () -> Unit
+    onSupabaseSignIn: (email: String, pass: String, onResult: (Boolean, String?) -> Unit) -> Unit = { _, _, _ -> },
+    onSupabaseSignUp: (email: String, pass: String, name: String, onResult: (Boolean, String?) -> Unit) -> Unit = { _, _, _, _ -> }
 ) {
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Sign In, 1 = Sign Up
+
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var displayName by remember { mutableStateOf("") }
+
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
     val infiniteTransition = rememberInfiniteTransition(label = "backgroundAnimation")
 
-    // Animated color shifting background
     val color1 by infiniteTransition.animateColor(
         initialValue = Color(0xFF2A1B36),
         targetValue = Color(0xFF4A184D),
@@ -49,7 +65,6 @@ fun LoginScreen(
         label = "c2"
     )
 
-    // Title pulse/scale animation
     val scaleAnim by infiniteTransition.animateFloat(
         initialValue = 0.96f,
         targetValue = 1.04f,
@@ -60,7 +75,6 @@ fun LoginScreen(
         label = "scale"
     )
 
-    // Floating particle positions animation
     val floatAnim by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
@@ -80,12 +94,11 @@ fun LoginScreen(
                 )
             )
     ) {
-        // Floating sugar / candy particles in background
         Canvas(modifier = Modifier.fillMaxSize()) {
             val canvasWidth = size.width
             val canvasHeight = size.height
-
             val random = Random(42)
+
             repeat(30) { index ->
                 val x = random.nextFloat() * canvasWidth
                 val speed = 0.3f + (index % 5) * 0.15f
@@ -107,25 +120,24 @@ fun LoginScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // Animated App Logo / Emoji Badge
             Text(
                 text = "🍬 🍭 🍩",
                 fontSize = 42.sp,
                 modifier = Modifier.scale(scaleAnim)
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Fun animated Sugar Market title
             Text(
                 text = "SUGAR MARKET",
-                fontSize = 38.sp,
+                fontSize = 36.sp,
                 fontWeight = FontWeight.ExtraBold,
                 fontFamily = FontFamily.SansSerif,
                 textAlign = TextAlign.Center,
@@ -141,23 +153,22 @@ fun LoginScreen(
                 )
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "The Real-Time Classroom Candy Economy",
+                text = "Classroom Candy Economy • Supabase Auth",
                 color = Color(0xFFD7C4D8),
-                fontSize = 15.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // Main Glassmorphism Entry Card
             Card(
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0x22FFFFFF)
+                    containerColor = Color(0x33FFFFFF)
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -167,49 +178,150 @@ fun LoginScreen(
                         .fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "Sign in to Trade",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                    TabRow(
+                        selectedTabIndex = selectedTab,
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Tab(
+                            selected = selectedTab == 0,
+                            onClick = {
+                                selectedTab = 0
+                                errorMessage = null
+                            },
+                            text = { Text("Sign In", fontWeight = FontWeight.Bold, color = Color.White) }
+                        )
+                        Tab(
+                            selected = selectedTab == 1,
+                            onClick = {
+                                selectedTab = 1
+                                errorMessage = null
+                            },
+                            text = { Text("Sign Up", fontWeight = FontWeight.Bold, color = Color.White) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (errorMessage != null) {
+                        Text(
+                            text = errorMessage!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Email Address", color = Color(0xFFD7C4D8)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Email,
+                            imeAction = ImeAction.Next
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color(0xFFFF7EB6),
+                            unfocusedBorderColor = Color(0x66FFFFFF)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     )
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    Text(
-                        text = "Google Account required to place buys & sells and save your portfolio.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFD7C4D8),
-                        textAlign = TextAlign.Center
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Password", color = Color(0xFFD7C4D8)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = if (selectedTab == 1) ImeAction.Next else ImeAction.Done
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color(0xFFFF7EB6),
+                            unfocusedBorderColor = Color(0x66FFFFFF)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    if (selectedTab == 1) {
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                    // PRIMARY ENTRY WAY: Google OAuth Sign-In Button
+                        OutlinedTextField(
+                            value = displayName,
+                            onValueChange = { displayName = it },
+                            label = { Text("Display Name", color = Color(0xFFD7C4D8)) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Text,
+                                imeAction = ImeAction.Done
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color(0xFFFF7EB6),
+                                unfocusedBorderColor = Color(0x66FFFFFF)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
                     Button(
-                        onClick = onSignInClick,
+                        onClick = {
+                            if (email.isBlank() || password.isBlank()) {
+                                errorMessage = "Please enter email and password"
+                                return@Button
+                            }
+                            isLoading = true
+                            errorMessage = null
+
+                            if (selectedTab == 0) {
+                                onSupabaseSignIn(email, password) { success, err ->
+                                    isLoading = false
+                                    if (!success) {
+                                        errorMessage = err ?: "Sign in failed"
+                                    }
+                                }
+                            } else {
+                                val name = displayName.ifBlank { email.substringBefore("@") }
+                                onSupabaseSignUp(email, password, name) { success, err ->
+                                    isLoading = false
+                                    if (!success) {
+                                        errorMessage = err ?: "Sign up failed"
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !isLoading,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White,
-                            contentColor = Color(0xFF1B0B24)
+                            containerColor = Color(0xFFFF7EB6),
+                            contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
+                            .height(50.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "G ",
-                                fontWeight = FontWeight.Black,
-                                fontSize = 20.sp,
-                                color = Color(0xFF4285F4)
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                        } else {
                             Text(
-                                text = "Sign in with Google",
+                                text = if (selectedTab == 0) "Sign In with Supabase" else "Create Account",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
                             )
@@ -218,21 +330,56 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // SECONDARY DISCRETE OPTION: Guest Read-Only Mode
-                    TextButton(
-                        onClick = onBypassClick
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Browse Market as Guest (Read Only) →",
-                            color = Color(0xFFFF7EB6),
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp
+                        HorizontalDivider(
+                            modifier = Modifier.weight(1f),
+                            color = Color(0x44FFFFFF)
                         )
+                        Text(
+                            text = " OR ",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFD7C4D8)
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.weight(1f),
+                            color = Color(0x44FFFFFF)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedButton(
+                        onClick = onSignInClick,
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "G ",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 18.sp,
+                                color = Color(0xFF4285F4)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Continue with Google Trader",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
