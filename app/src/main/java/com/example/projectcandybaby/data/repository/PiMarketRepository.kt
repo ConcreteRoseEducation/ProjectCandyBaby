@@ -267,10 +267,15 @@ class PiMarketRepository(
                     priceHistory = existing.priceHistory + price,
                 )
             } else {
+                val key = item.optString("sectorKey", "").ifBlank { item.optString("sector", "") }
+                val sector = Sector.entries.find { s ->
+                    s.name.equals(key, ignoreCase = true) || s.displayName.equals(key, ignoreCase = true)
+                } ?: Sector.FIZZY_DRINKS
+
                 bySymbol[symbol] = StockTicker(
                     symbol = symbol,
                     name = item.optString("name", symbol),
-                    sector = Sector.FIZZY_DRINKS,
+                    sector = sector,
                     basePrice = price,
                     currentPrice = price,
                     description = "",
@@ -282,8 +287,11 @@ class PiMarketRepository(
     }
 
     private fun parseStock(item: JSONObject): StockTicker {
-        val sectorKey = item.optString("sectorKey", "FIZZY_DRINKS")
-        val sector = runCatching { Sector.valueOf(sectorKey) }.getOrDefault(Sector.FIZZY_DRINKS)
+        val key = item.optString("sectorKey", "").ifBlank { item.optString("sector", "") }
+        val sector = Sector.entries.find { s ->
+            s.name.equals(key, ignoreCase = true) || s.displayName.equals(key, ignoreCase = true)
+        } ?: Sector.FIZZY_DRINKS
+
         return StockTicker(
             symbol = item.getString("symbol"),
             name = item.optString("name"),

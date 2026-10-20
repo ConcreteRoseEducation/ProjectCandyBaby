@@ -30,9 +30,11 @@ fun MarketScreen(
 
     val filteredStocks = remember(stocks, searchQuery, selectedSector) {
         stocks.filter { stock ->
-            val matchesQuery = searchQuery.isBlank() ||
-                    stock.symbol.contains(searchQuery, ignoreCase = true) ||
-                    stock.name.contains(searchQuery, ignoreCase = true)
+            val query = searchQuery.trim()
+            val matchesQuery = query.isBlank() ||
+                    stock.symbol.contains(query, ignoreCase = true) ||
+                    stock.name.contains(query, ignoreCase = true) ||
+                    stock.sector.displayName.contains(query, ignoreCase = true)
             val matchesSector = selectedSector == null || stock.sector == selectedSector
             matchesQuery && matchesSector
         }
