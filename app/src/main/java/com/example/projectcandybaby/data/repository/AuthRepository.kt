@@ -188,11 +188,13 @@ class AuthRepository {
         }
     }
 
-    fun signInWithDemoGoogleAccount(name: String = "Google User") {
+    fun signInWithDemoGoogleAccount(name: String = "Google User", email: String = "trader@sugarmarket.app") {
+        val cleanEmail = if (email.isBlank()) "trader@sugarmarket.app" else email.trim().lowercase()
+        val stableUid = "google_" + cleanEmail.replace("@", "_at_").replace(".", "_")
         val user = SugarUser(
-            uid = "google_user_" + (System.currentTimeMillis() % 100000),
+            uid = stableUid,
             displayName = name,
-            email = "user@sugarmarket.app"
+            email = cleanEmail
         )
         _signedInUser.value = user
         runCatching { auth.signInAnonymously() }

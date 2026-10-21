@@ -66,6 +66,17 @@ economyRouter.post(["/profile", "/users/profile", "/users"], requireAuth, async 
     return;
   }
 
+  if (username) {
+    const existingUsername = await pool.query<{ id: number }>(
+      "SELECT id FROM users WHERE LOWER(username) = LOWER($1) AND id != $2",
+      [username, user.id],
+    );
+    if ((existingUsername.rowCount ?? 0) > 0) {
+      res.status(400).json({ error: "Username is already taken by another trader" });
+      return;
+    }
+  }
+
   if (age != null && (!Number.isInteger(age) || age < 5 || age > 120)) {
     res.status(400).json({ error: "Age must be between 5 and 120" });
     return;
