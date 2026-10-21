@@ -21,7 +21,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // LAN address or Cloudflare Tunnel URL of the classroom Pi / server.
-        buildConfigField("String", "MARKET_BASE_URL", "\"https://repeated-hip-mrna-joining.trycloudflare.com\"")
+        buildConfigField("String", "MARKET_BASE_URL", "\"https://revolution-sources-permitted-erp.trycloudflare.com\"")
     }
 
     buildTypes {
