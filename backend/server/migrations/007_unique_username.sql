@@ -1,5 +1,21 @@
--- Clear old duplicate test/demo accounts from previous testing
-DELETE FROM users WHERE firebase_uid LIKE 'dev:google_trader_%' OR firebase_uid = 'dev:google_test_user_%' OR firebase_uid = 'dev:guest';
+-- Safely clear old duplicate test/demo accounts and their related child records
+DELETE FROM portfolio_snapshots WHERE user_id IN (
+    SELECT id FROM users WHERE firebase_uid LIKE 'dev:google_trader_%' OR firebase_uid LIKE 'dev:google_test_user_%' OR firebase_uid = 'dev:guest'
+);
+
+DELETE FROM transactions WHERE user_id IN (
+    SELECT id FROM users WHERE firebase_uid LIKE 'dev:google_trader_%' OR firebase_uid LIKE 'dev:google_test_user_%' OR firebase_uid = 'dev:guest'
+);
+
+DELETE FROM holdings WHERE user_id IN (
+    SELECT id FROM users WHERE firebase_uid LIKE 'dev:google_trader_%' OR firebase_uid LIKE 'dev:google_test_user_%' OR firebase_uid = 'dev:guest'
+);
+
+DELETE FROM class_members WHERE user_id IN (
+    SELECT id FROM users WHERE firebase_uid LIKE 'dev:google_trader_%' OR firebase_uid LIKE 'dev:google_test_user_%' OR firebase_uid = 'dev:guest'
+);
+
+DELETE FROM users WHERE firebase_uid LIKE 'dev:google_trader_%' OR firebase_uid LIKE 'dev:google_test_user_%' OR firebase_uid = 'dev:guest';
 
 -- Ensure username is strictly unique across all player accounts
 DO $$
