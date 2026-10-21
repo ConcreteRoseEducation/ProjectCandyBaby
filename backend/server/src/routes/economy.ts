@@ -248,13 +248,14 @@ economyRouter.post("/trades", requireAuth, async (req: AuthedRequest, res) => {
 
 economyRouter.get("/leaderboard", async (_req, res) => {
   const rows = await pool.query(
-    `SELECT u.display_name,
+    `SELECT COALESCE(NULLIF(u.username, ''), u.display_name, 'Trader') AS display_name,
             u.sugar_coins + COALESCE(SUM(h.quantity * s.current_price), 0) AS total_value,
             u.sugar_coins
      FROM users u
      LEFT JOIN holdings h ON h.user_id = u.id
      LEFT JOIN stocks s ON s.id = h.stock_id
-     GROUP BY u.id, u.display_name, u.sugar_coins
+     WHERE u.firebase_uid != 'dev:guest'
+     GROUP BY u.id, u.display_name, u.username, u.sugar_coins
      ORDER BY total_value DESC
      LIMIT 25`,
   );

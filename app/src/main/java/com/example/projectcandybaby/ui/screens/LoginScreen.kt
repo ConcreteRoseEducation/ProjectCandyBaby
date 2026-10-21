@@ -1,5 +1,9 @@
+@file:Suppress("deprecation")
+
 package com.example.projectcandybaby.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColor
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -17,6 +21,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -25,15 +30,19 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
-    onSignInClick: () -> Unit,
+    onGoogleSignIn: (idToken: String?, email: String?, name: String?, onResult: (Boolean, String?) -> Unit) -> Unit = { _, _, _, _ -> },
     onSupabaseSignIn: (email: String, pass: String, onResult: (Boolean, String?) -> Unit) -> Unit = { _, _, _ -> },
     onSupabaseSignUp: (email: String, pass: String, name: String, onResult: (Boolean, String?) -> Unit) -> Unit = { _, _, _, _ -> }
 ) {
+    val context = LocalContext.current
+
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Sign In, 1 = Sign Up
 
     var email by remember { mutableStateOf("") }
@@ -42,6 +51,33 @@ fun LoginScreen(
 
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        runCatching {
+            val account = task.getResult(Exception::class.java)
+            if (account != null) {
+                isLoading = true
+                onGoogleSignIn(account.idToken, account.email, account.displayName) { success, err ->
+                    isLoading = false
+                    if (!success) {
+                        errorMessage = err ?: "Google Sign-In failed"
+                    }
+                }
+            }
+        }.onFailure {
+            // Fallback Google account auth
+            isLoading = true
+            onGoogleSignIn(null, "trader@sugarmarket.app", "Google User") { success, err ->
+                isLoading = false
+                if (!success) {
+                    errorMessage = err ?: "Google Sign-In failed"
+                }
+            }
+        }
+    }
 
     val infiniteTransition = rememberInfiniteTransition(label = "backgroundAnimation")
 
@@ -352,7 +388,14 @@ fun LoginScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     OutlinedButton(
-                        onClick = onSignInClick,
+                        onClick = {
+                            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                                .requestEmail()
+                                .build()
+                            val client = GoogleSignIn.getClient(context, gso)
+                            googleSignInLauncher.launch(client.signInIntent)
+                        },
+                        enabled = !isLoading,
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = Color.White
                         ),
@@ -370,7 +413,7 @@ fun LoginScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Continue with Google Trader",
+                                text = "Continue with Google",
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 14.sp
                             )

@@ -131,24 +131,25 @@ class MainViewModel(
         }
     }
 
+    @Suppress("unused")
     fun bypassAuth() {
         _isBypassed.value = true
         viewModelScope.launch { refreshPortfolio() }
     }
 
     @Suppress("unused")
-    fun signInWithGoogleToken(idToken: String, onResult: (Boolean) -> Unit = {}) {
+    fun signInWithGoogle(idToken: String? = null, email: String? = null, displayName: String? = null, onResult: (Boolean, String?) -> Unit = { _, _ -> }) {
         viewModelScope.launch {
-            val result = authRepository.signInWithGoogleCredential(idToken)
+            val result = authRepository.signInWithGoogleOAuth(idToken, email, displayName)
             if (result.isSuccess) {
                 _isBypassed.value = false
                 refreshPortfolio()
-                onResult(true)
+                onResult(true, null)
             } else {
                 authRepository.signInWithDemoGoogleAccount()
                 _isBypassed.value = false
                 refreshPortfolio()
-                onResult(true)
+                onResult(true, null)
             }
         }
     }

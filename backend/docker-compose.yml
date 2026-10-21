@@ -11,7 +11,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U candybaby -d candybaby"]
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 208967-2784-6423
     restart: unless-stopped
 
   api:
@@ -21,7 +21,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://candybaby:${POSTGRES_PASSWORD}@postgres:5432/candybaby
+      DATABASE_URL: ${DATABASE_URL:-postgres://candybaby:${POSTGRES_PASSWORD}@postgres:5432/candybaby}
       PORT: 3000
       AUTH_MODE: ${AUTH_MODE:-dev}
       ADMIN_TOKEN: ${ADMIN_TOKEN}
@@ -39,7 +39,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://candybaby:${POSTGRES_PASSWORD}@postgres:5432/candybaby
+      DATABASE_URL: ${DATABASE_URL:-postgres://candybaby:${POSTGRES_PASSWORD}@postgres:5432/candybaby}
       TICK_INTERVAL_MS: ${TICK_INTERVAL_MS:-30000}
       EVENT_CHANCE_PER_TICK: ${EVENT_CHANCE_PER_TICK:-0.08}
       CIRCUIT_BREAKER: ${CIRCUIT_BREAKER:-0.05}

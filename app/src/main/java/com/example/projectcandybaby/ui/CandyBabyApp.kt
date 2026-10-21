@@ -73,7 +73,9 @@ fun CandyBabyApp(viewModel: MainViewModel) {
 
     if (currentUser == null) {
         LoginScreen(
-            onSignInClick = { viewModel.signInWithGoogleDemo() },
+            onGoogleSignIn = { idToken, email, name, onResult ->
+                viewModel.signInWithGoogle(idToken, email, name, onResult)
+            },
             onSupabaseSignIn = { email, password, onResult ->
                 viewModel.signInWithSupabase(email, password, onResult)
             },

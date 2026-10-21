@@ -32,7 +32,7 @@ class AuthRepository {
     
     private val _signedInUser = MutableStateFlow<SugarUser?>(
         auth.currentUser?.let {
-            SugarUser(it.uid, it.displayName ?: it.email ?: "Google Trader", it.email)
+            SugarUser(it.uid, it.displayName ?: it.email ?: "Google User", it.email)
         }
     )
     val signedInUser: StateFlow<SugarUser?> = _signedInUser.asStateFlow()
@@ -43,7 +43,7 @@ class AuthRepository {
             if (user != null && supabaseToken == null) {
                 _signedInUser.value = SugarUser(
                     user.uid,
-                    user.displayName ?: user.email ?: "Google Trader",
+                    user.displayName ?: user.email ?: "Google User",
                     user.email
                 )
             }
@@ -129,6 +129,45 @@ class AuthRepository {
         }
     }
 
+    suspend fun signInWithGoogleOAuth(idToken: String? = null, email: String? = null, displayName: String? = null): Result<SugarUser> = withContext(Dispatchers.IO) {
+        try {
+            val json = JSONObject()
+            if (!idToken.isNullOrBlank()) json.put("idToken", idToken)
+            if (!email.isNullOrBlank()) json.put("email", email)
+            if (!displayName.isNullOrBlank()) json.put("displayName", displayName)
+
+            val request = Request.Builder()
+                .url("${BuildConfig.MARKET_BASE_URL}/auth/google")
+                .post(json.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string().orEmpty()
+                val resObj = JSONObject(bodyStr)
+                if (!response.isSuccessful) {
+                    val errMsg = resObj.optString("error", "Google Auth failed (${response.code})")
+                    return@withContext Result.failure(Exception(errMsg))
+                }
+                val token = resObj.optString("token", "")
+                if (token.isNotBlank()) {
+                    supabaseToken = token
+                }
+                val userObj = resObj.optJSONObject("user")
+                val resolvedName = userObj?.optString("displayName") ?: displayName ?: email?.substringBefore("@") ?: "Google User"
+                val sugarUser = SugarUser(
+                    uid = userObj?.optString("id") ?: resObj.optJSONObject("supabaseUser")?.optString("id") ?: email ?: "google_user",
+                    displayName = resolvedName,
+                    email = email
+                )
+                _signedInUser.value = sugarUser
+                Result.success(sugarUser)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    @Suppress("unused")
     suspend fun signInWithGoogleCredential(idToken: String): Result<SugarUser> = suspendCancellableCoroutine { continuation ->
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         auth.signInWithCredential(credential).addOnCompleteListener { task ->
@@ -137,7 +176,7 @@ class AuthRepository {
                     val firebaseUser = task.result!!.user!!
                     val user = SugarUser(
                         firebaseUser.uid,
-                        firebaseUser.displayName ?: firebaseUser.email ?: "Google Trader",
+                        firebaseUser.displayName ?: firebaseUser.email ?: "Google User",
                         firebaseUser.email
                     )
                     _signedInUser.value = user
@@ -149,11 +188,11 @@ class AuthRepository {
         }
     }
 
-    fun signInWithDemoGoogleAccount(name: String = "Google Trader") {
+    fun signInWithDemoGoogleAccount(name: String = "Google User") {
         val user = SugarUser(
-            uid = "google_trader_" + (System.currentTimeMillis() % 100000),
+            uid = "google_user_" + (System.currentTimeMillis() % 100000),
             displayName = name,
-            email = "trader@sugarmarket.app"
+            email = "user@sugarmarket.app"
         )
         _signedInUser.value = user
         runCatching { auth.signInAnonymously() }

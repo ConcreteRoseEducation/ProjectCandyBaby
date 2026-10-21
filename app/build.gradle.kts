@@ -20,8 +20,8 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // LAN address of the classroom Pi. Change this if DHCP gives the Pi a new IP.
-        buildConfigField("String", "MARKET_BASE_URL", "\"https://mistakes-scoring-terminology-announcements.trycloudflare.com\"")
+        // LAN address or Cloudflare Tunnel URL of the classroom Pi / server.
+        buildConfigField("String", "MARKET_BASE_URL", "\"https://collecting-salvador-junction-creatures.trycloudflare.com\"")
     }
 
     buildTypes {

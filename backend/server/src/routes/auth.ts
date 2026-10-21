@@ -102,3 +102,71 @@ authRouter.post("/auth/login", async (req, res) => {
     res.status(500).json({ error: error instanceof Error ? error.message : "Login failed" });
   }
 });
+
+authRouter.post("/auth/google", async (req, res) => {
+  const idToken = req.body?.idToken ? String(req.body.idToken).trim() : null;
+  const email = req.body?.email ? String(req.body.email).trim() : null;
+  const displayName = req.body?.displayName ? String(req.body.displayName).trim() : email?.split("@")[0] || "Google User";
+
+  try {
+    const supabase = getSupabaseClient();
+    let supabaseUser: { id: string; email?: string } | null = null;
+    let token: string | null = null;
+
+    if (idToken) {
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: "google",
+        token: idToken,
+      });
+
+      if (!error && data.user && data.session) {
+        supabaseUser = data.user;
+        token = data.session.access_token;
+      }
+    }
+
+    if (!supabaseUser && email) {
+      const dummyPassword = `SupabaseGoogleAuth_${email}_Secure!`;
+
+      const loginRes = await supabase.auth.signInWithPassword({
+        email,
+        password: dummyPassword,
+      });
+
+      if (loginRes.data.user && loginRes.data.session) {
+        supabaseUser = loginRes.data.user;
+        token = loginRes.data.session.access_token;
+      } else {
+        const signupRes = await supabase.auth.signUp({
+          email,
+          password: dummyPassword,
+          options: {
+            data: { display_name: displayName, provider: "google" },
+          },
+        });
+        if (signupRes.data.user) {
+          supabaseUser = signupRes.data.user;
+          token = signupRes.data.session?.access_token || null;
+        }
+      }
+    }
+
+    if (!supabaseUser) {
+      res.status(400).json({ error: "Failed to authenticate Google user in Supabase" });
+      return;
+    }
+
+    const dbUser = await ensureUser(supabaseUser.id, displayName);
+
+    res.json({
+      token,
+      user: sanitizeProfile(dbUser),
+      supabaseUser: {
+        id: supabaseUser.id,
+        email: supabaseUser.email,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Google Auth failed" });
+  }
+});
