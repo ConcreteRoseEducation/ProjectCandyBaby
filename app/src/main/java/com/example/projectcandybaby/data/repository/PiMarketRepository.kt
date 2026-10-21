@@ -2,10 +2,7 @@ package com.example.projectcandybaby.data.repository
 
 import android.util.Log
 import com.example.projectcandybaby.BuildConfig
-import com.example.projectcandybaby.data.model.Holding
-import com.example.projectcandybaby.data.model.LeaderboardEntry
 import com.example.projectcandybaby.data.model.MarketEvent
-import com.example.projectcandybaby.data.model.UserProfile
 import com.example.projectcandybaby.data.model.Sector
 import com.example.projectcandybaby.data.model.StockTicker
 import kotlinx.coroutines.CompletableDeferred
@@ -20,10 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -32,9 +27,7 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
-class PiMarketRepository(
-    private val authRepository: AuthRepository,
-) {
+class PiMarketRepository {
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS)
@@ -125,79 +118,6 @@ class PiMarketRepository(
         }
     }
 
-    suspend fun fetchPortfolio(): Pair<Double, List<Holding>> = withContext(Dispatchers.IO) {
-        val json = authorizedGet("/portfolio")
-        val coins = json.getJSONObject("user").getDouble("sugarCoins")
-        val holdings = json.getJSONArray("holdings").mapObjects { item ->
-            Holding(
-                symbol = item.getString("symbol"),
-                quantity = item.getInt("quantity"),
-                averagePurchasePrice = item.optDouble(
-                    "avg_purchase_price",
-                    item.optDouble("averagePurchasePrice"),
-                ),
-            )
-        }
-        coins to holdings
-    }
-
-    suspend fun fetchProfile(): UserProfile = withContext(Dispatchers.IO) {
-        val json = authorizedGet("/profile")
-        val obj = json.getJSONObject("profile")
-        UserProfile(
-            id = obj.optLong("id"),
-            displayName = obj.optString("displayName", ""),
-            username = obj.optString("username").ifBlank { null },
-            fullName = obj.optString("fullName").ifBlank { null },
-            age = if (obj.has("age") && !obj.isNull("age")) obj.getInt("age") else null,
-            isChildAccount = obj.optBoolean("isChildAccount", false),
-            sugarCoins = obj.optDouble("sugarCoins", 1000.0)
-        )
-    }
-
-    suspend fun updateProfile(username: String?, fullName: String?, age: Int?): UserProfile = withContext(Dispatchers.IO) {
-        val body = JSONObject().apply {
-            if (!username.isNullOrBlank()) put("username", username.trim())
-            if (!fullName.isNullOrBlank()) put("fullName", fullName.trim())
-            if (age != null) put("age", age)
-        }.toString().toRequestBody(JSON)
-
-        val json = authorizedRequest(
-            Request.Builder()
-                .url("${BuildConfig.MARKET_BASE_URL}/profile")
-                .post(body)
-        )
-        val obj = json.getJSONObject("profile")
-        UserProfile(
-            id = obj.optLong("id"),
-            displayName = obj.optString("displayName", ""),
-            username = obj.optString("username").ifBlank { null },
-            fullName = obj.optString("fullName").ifBlank { null },
-            age = if (obj.has("age") && !obj.isNull("age")) obj.getInt("age") else null,
-            isChildAccount = obj.optBoolean("isChildAccount", false),
-            sugarCoins = obj.optDouble("sugarCoins", 1000.0)
-        )
-    }
-
-    suspend fun fetchLeaderboard(): List<LeaderboardEntry> = withContext(Dispatchers.IO) {
-        try {
-            val json = publicGet("/leaderboard")
-            val array = json.getJSONArray("leaderboard")
-            var currentRank = 1
-            array.mapObjects { item ->
-                LeaderboardEntry(
-                    rank = currentRank++,
-                    displayName = item.optString("display_name", "Anonymous Trader"),
-                    totalValue = item.optDouble("total_value", item.optDouble("sugar_coins", 1000.0)),
-                    sugarCoins = item.optDouble("sugar_coins", 1000.0)
-                )
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to fetch leaderboard", e)
-            emptyList()
-        }
-    }
-
     suspend fun fetchMarketEvents(): List<MarketEvent> = withContext(Dispatchers.IO) {
         try {
             val json = publicGet("/events")
@@ -219,21 +139,6 @@ class PiMarketRepository(
             Log.w(TAG, "Failed to fetch market events", e)
             emptyList()
         }
-    }
-
-    suspend fun placeTrade(symbol: String, type: String, quantity: Int) = withContext(Dispatchers.IO) {
-        val body = JSONObject()
-            .put("symbol", symbol)
-            .put("type", type)
-            .put("quantity", quantity)
-            .toString()
-            .toRequestBody(JSON)
-        authorizedRequest(
-            Request.Builder()
-                .url("${BuildConfig.MARKET_BASE_URL}/trades")
-                .post(body),
-        )
-        Unit
     }
 
     private suspend fun fetchStocksWithHistory(): List<StockTicker> = withContext(Dispatchers.IO) {
@@ -314,28 +219,6 @@ class PiMarketRepository(
         }
     }
 
-    private suspend fun authorizedGet(path: String): JSONObject {
-        return authorizedRequest(
-            Request.Builder()
-                .url("${BuildConfig.MARKET_BASE_URL}$path")
-                .get(),
-        )
-    }
-
-    private suspend fun authorizedRequest(builder: Request.Builder): JSONObject {
-        authRepository.marketHeaders().forEach { (key, value) ->
-            builder.addHeader(key, value)
-        }
-        httpClient.newCall(builder.build()).execute().use { response ->
-            val body = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                val message = runCatching { JSONObject(body).optString("error") }.getOrNull()
-                throw IllegalStateException(message?.ifBlank { null } ?: "Request failed: ${response.code}")
-            }
-            return if (body.isBlank()) JSONObject() else JSONObject(body)
-        }
-    }
-
     private inline fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<T> {
         return (0 until length()).map { transform(getJSONObject(it)) }
     }
@@ -347,6 +230,5 @@ class PiMarketRepository(
 
     companion object {
         private const val TAG = "PiMarket"
-        private val JSON = "application/json; charset=utf-8".toMediaType()
     }
 }

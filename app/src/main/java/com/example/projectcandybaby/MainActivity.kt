@@ -20,9 +20,10 @@ class MainActivity : ComponentActivity() {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val app = application as CandyBabyApplication
                 return MainViewModel(
+                    app.database.holdingDao(),
+                    app.database.transactionDao(),
                     app.database.portfolioDao(),
                     app.userPrefs,
-                    app.authRepository,
                     app.piMarketRepository,
                 ) as T
             }
@@ -33,7 +34,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             ProjectCandyBabyTheme {
-                // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,

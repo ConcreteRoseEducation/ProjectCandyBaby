@@ -26,10 +26,6 @@ fun DashboardScreen(
     profitLoss: Map<String, Double>,
     serverType: String = "public",
     marketEvents: List<MarketEvent> = emptyList(),
-    userName: String? = null,
-    onSignInClick: () -> Unit = {},
-    onSignOutClick: () -> Unit = {},
-    onLeaderboardClick: () -> Unit = {},
     onMarketClick: () -> Unit
 ) {
     Scaffold(
@@ -37,14 +33,10 @@ fun DashboardScreen(
             CenterAlignedTopAppBar(
                 title = { Text("Sugar Market Dashboard") },
                 actions = {
-                    IconButton(onClick = onLeaderboardClick) {
-                        Text("🏆")
-                    }
-
                     Surface(
                         shape = MaterialTheme.shapes.extraSmall,
                         color = if (serverType == "private") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-                        modifier = Modifier.padding(end = 4.dp)
+                        modifier = Modifier.padding(end = 12.dp)
                     ) {
                         Text(
                             text = if (serverType == "private") "🔒 Private" else "🌐 Public",
@@ -53,34 +45,12 @@ fun DashboardScreen(
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
                         )
                     }
-
-                    if (userName != null) {
-                        TextButton(onClick = onSignOutClick) {
-                            Text("Sign Out", style = MaterialTheme.typography.labelMedium)
-                        }
-                    } else {
-                        Button(
-                            onClick = onSignInClick,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Text("G Sign In", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                        }
-                    }
                 }
             )
         },
         floatingActionButton = {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                SmallFloatingActionButton(onClick = onLeaderboardClick) {
-                    Text("🏆")
-                }
-                ExtendedFloatingActionButton(onClick = onMarketClick) {
-                    Text("Go to Market 🍬")
-                }
+            ExtendedFloatingActionButton(onClick = onMarketClick) {
+                Text("Go to Market 🍬")
             }
         }
     ) { padding ->
@@ -96,27 +66,7 @@ fun DashboardScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Current Balance", style = MaterialTheme.typography.labelLarge)
-                            if (userName != null) {
-                                Text(
-                                    "👤 $userName",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            } else {
-                                Text(
-                                    "👤 Guest User",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                            }
-                        }
+                        Text("Current Balance", style = MaterialTheme.typography.labelLarge)
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             "${String.format(Locale.US, "%.2f", sugarCoins)} SC",

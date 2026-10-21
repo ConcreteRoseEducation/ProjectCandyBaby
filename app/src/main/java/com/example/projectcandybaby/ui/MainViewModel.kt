@@ -1,19 +1,20 @@
 package com.example.projectcandybaby.ui
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.projectcandybaby.data.db.HoldingDao
 import com.example.projectcandybaby.data.db.PortfolioDao
+import com.example.projectcandybaby.data.db.TransactionDao
 import com.example.projectcandybaby.data.model.Holding
-import com.example.projectcandybaby.data.model.LeaderboardEntry
 import com.example.projectcandybaby.data.model.PortfolioPoint
-import com.example.projectcandybaby.data.model.UserProfile
 import com.example.projectcandybaby.data.model.StockTicker
-import com.example.projectcandybaby.data.repository.AuthRepository
+import com.example.projectcandybaby.data.model.Transaction
+import com.example.projectcandybaby.data.model.TransactionType
 import com.example.projectcandybaby.data.repository.PiMarketRepository
 import com.example.projectcandybaby.data.repository.UserPreferencesRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -22,22 +23,19 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 class MainViewModel(
+    private val holdingDao: HoldingDao,
+    private val transactionDao: TransactionDao,
     private val portfolioDao: PortfolioDao,
     private val userPrefs: UserPreferencesRepository,
-    private val authRepository: AuthRepository,
-    private val piMarketRepository: PiMarketRepository,
+    piMarketRepository: PiMarketRepository,
 ) : ViewModel() {
 
-    private val _isBypassed = MutableStateFlow(false)
-    val isBypassed = _isBypassed.asStateFlow()
+    val holdings: StateFlow<List<Holding>> = holdingDao.getAllHoldings()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    private val _holdings = MutableStateFlow<List<Holding>>(emptyList())
-    val holdings = _holdings.asStateFlow()
+    val sugarCoins: StateFlow<Double> = userPrefs.sugarCoinsFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 1000.0)
 
-    private val _sugarCoins = MutableStateFlow(1000.0)
-    val sugarCoins = _sugarCoins.asStateFlow()
-
-    val currentUser = authRepository.signedInUser
     val stocks = piMarketRepository.getGlobalStocks()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
@@ -71,56 +69,15 @@ class MainViewModel(
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
 
     init {
-        viewModelScope.launch { refreshPortfolio() }
-        viewModelScope.launch { refreshLeaderboard() }
         viewModelScope.launch {
-            combine(currentUser, isBypassed) { _, _ -> }
-                .collect { refreshPortfolio() }
-        }
-    }
-
-    private val _leaderboard = MutableStateFlow<List<LeaderboardEntry>>(emptyList())
-    val leaderboard = _leaderboard.asStateFlow()
-
-    fun refreshLeaderboard() {
-        viewModelScope.launch {
-            try {
-                _leaderboard.value = piMarketRepository.fetchLeaderboard()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to fetch leaderboard", e)
-            }
-        }
-    }
-
-    private val _userProfile = MutableStateFlow<UserProfile?>(null)
-    val userProfile = _userProfile.asStateFlow()
-
-    private val _profileError = MutableStateFlow<String?>(null)
-    val profileError = _profileError.asStateFlow()
-
-    fun refreshProfile() {
-        if (currentUser.value == null) return
-        viewModelScope.launch {
-            try {
-                val profile = piMarketRepository.fetchProfile()
-                _userProfile.value = profile
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to fetch profile", e)
-            }
-        }
-    }
-
-    fun updateUserProfile(username: String, fullName: String, age: Int, onComplete: (Boolean) -> Unit = {}) {
-        viewModelScope.launch {
-            try {
-                val profile = piMarketRepository.updateProfile(username, fullName, age)
-                _userProfile.value = profile
-                _profileError.value = null
-                onComplete(true)
-            } catch (e: Exception) {
-                Log.e(TAG, "Profile update failed", e)
-                _profileError.value = e.message ?: "Failed to save profile"
-                onComplete(false)
+            combine(sugarCoins, holdings, stocks) { coins, hList, sList ->
+                val holdingsVal = hList.sumOf { h ->
+                    val price = sList.find { it.symbol == h.symbol }?.currentPrice ?: 0.0
+                    h.quantity * price
+                }
+                coins + holdingsVal
+            }.collect { totalVal ->
+                portfolioDao.insertPoint(PortfolioPoint(totalValue = totalVal))
             }
         }
     }
@@ -131,131 +88,85 @@ class MainViewModel(
         }
     }
 
-    @Suppress("unused")
-    fun bypassAuth() {
-        _isBypassed.value = true
-        viewModelScope.launch { refreshPortfolio() }
-    }
-
-    @Suppress("unused")
-    fun signInWithGoogle(idToken: String? = null, email: String? = null, displayName: String? = null, onResult: (Boolean, String?) -> Unit = { _, _ -> }) {
-        viewModelScope.launch {
-            val result = authRepository.signInWithGoogleOAuth(idToken, email, displayName)
-            if (result.isSuccess) {
-                _isBypassed.value = false
-                refreshPortfolio()
-                onResult(true, null)
-            } else {
-                authRepository.signInWithDemoGoogleAccount()
-                _isBypassed.value = false
-                refreshPortfolio()
-                onResult(true, null)
-            }
-        }
-    }
-
-    fun signInWithGoogleDemo() {
-        viewModelScope.launch {
-            authRepository.signInWithDemoGoogleAccount()
-            _isBypassed.value = false
-            refreshPortfolio()
-        }
-    }
-
-    fun signUpWithSupabase(email: String, password: String, displayName: String, onResult: (Boolean, String?) -> Unit) {
-        viewModelScope.launch {
-            val result = authRepository.signUpWithSupabase(email, password, displayName)
-            if (result.isSuccess) {
-                _isBypassed.value = false
-                refreshPortfolio()
-                onResult(true, null)
-            } else {
-                onResult(false, result.exceptionOrNull()?.message ?: "Signup failed")
-            }
-        }
-    }
-
-    fun signInWithSupabase(email: String, password: String, onResult: (Boolean, String?) -> Unit) {
-        viewModelScope.launch {
-            val result = authRepository.signInWithSupabase(email, password)
-            if (result.isSuccess) {
-                _isBypassed.value = false
-                refreshPortfolio()
-                onResult(true, null)
-            } else {
-                onResult(false, result.exceptionOrNull()?.message ?: "Login failed")
-            }
-        }
-    }
-
-    fun signOut() {
-        authRepository.signOut()
-        _isBypassed.value = false
-    }
-
     private val _tradeStatusMessage = MutableStateFlow<String?>(null)
-    @Suppress("unused")
     val tradeStatusMessage = _tradeStatusMessage.asStateFlow()
 
-    @Suppress("unused")
     fun clearTradeMessage() {
         _tradeStatusMessage.value = null
     }
 
     fun buyStock(ticker: StockTicker, quantity: Int) {
-        if (currentUser.value == null) {
-            _tradeStatusMessage.value = "🔒 Guests cannot place trades. Please sign in with Google."
-            return
-        }
         viewModelScope.launch {
-            try {
-                piMarketRepository.placeTrade(ticker.symbol, "BUY", quantity)
-                refreshPortfolio()
-                val totalStr = String.format(Locale.US, "%.2f", ticker.currentPrice * quantity)
-                _tradeStatusMessage.value = "✅ Purchased $quantity shares of ${ticker.symbol} ($totalStr SC)"
-            } catch (error: Exception) {
-                Log.e(TAG, "Buy failed", error)
-                val msg = error.message ?: "Trade failed"
-                _tradeStatusMessage.value = "❌ $msg"
+            val totalCost = ticker.currentPrice * quantity
+            val currentCoins = sugarCoins.value
+            if (currentCoins < totalCost) {
+                _tradeStatusMessage.value = "❌ Insufficient Sugar Coins to buy $quantity shares."
+                return@launch
             }
+
+            userPrefs.updateSugarCoins(currentCoins - totalCost)
+
+            transactionDao.insertTransaction(
+                Transaction(
+                    symbol = ticker.symbol,
+                    type = TransactionType.BUY,
+                    quantity = quantity,
+                    pricePerUnit = ticker.currentPrice,
+                )
+            )
+
+            val existingHolding = holdingDao.getHoldingBySymbol(ticker.symbol)
+            if (existingHolding != null) {
+                val newQty = existingHolding.quantity + quantity
+                val newAvg = ((existingHolding.quantity * existingHolding.averagePurchasePrice) + totalCost) / newQty
+                holdingDao.updateHolding(existingHolding.copy(quantity = newQty, averagePurchasePrice = newAvg))
+            } else {
+                holdingDao.insertHolding(
+                    Holding(
+                        symbol = ticker.symbol,
+                        quantity = quantity,
+                        averagePurchasePrice = ticker.currentPrice,
+                    )
+                )
+            }
+
+            val totalStr = String.format(Locale.US, "%.2f", totalCost)
+            _tradeStatusMessage.value = "✅ Purchased $quantity shares of ${ticker.symbol} ($totalStr SC)"
         }
     }
 
     fun sellStock(ticker: StockTicker, quantity: Int) {
-        if (currentUser.value == null) {
-            _tradeStatusMessage.value = "🔒 Guests cannot place trades. Please sign in with Google."
-            return
-        }
         viewModelScope.launch {
-            try {
-                piMarketRepository.placeTrade(ticker.symbol, "SELL", quantity)
-                refreshPortfolio()
-                val totalStr = String.format(Locale.US, "%.2f", ticker.currentPrice * quantity)
-                _tradeStatusMessage.value = "✅ Sold $quantity shares of ${ticker.symbol} ($totalStr SC)"
-            } catch (error: Exception) {
-                Log.e(TAG, "Sell failed", error)
-                val msg = error.message ?: "Trade failed"
-                _tradeStatusMessage.value = "❌ $msg"
+            val existingHolding = holdingDao.getHoldingBySymbol(ticker.symbol)
+            val ownedQty = existingHolding?.quantity ?: 0
+            if (ownedQty < quantity) {
+                _tradeStatusMessage.value = "❌ You don't own $quantity shares of ${ticker.symbol}."
+                return@launch
             }
-        }
-    }
 
-    private suspend fun refreshPortfolio() {
-        try {
-            val (coins, remoteHoldings) = piMarketRepository.fetchPortfolio()
-            _sugarCoins.value = coins
-            _holdings.value = remoteHoldings
-            val total = coins + remoteHoldings.sumOf { holding ->
-                val price = stocks.value.find { it.symbol == holding.symbol }?.currentPrice ?: 0.0
-                holding.quantity * price
+            val totalRevenue = ticker.currentPrice * quantity
+            val currentCoins = sugarCoins.value
+
+            userPrefs.updateSugarCoins(currentCoins + totalRevenue)
+
+            transactionDao.insertTransaction(
+                Transaction(
+                    symbol = ticker.symbol,
+                    type = TransactionType.SELL,
+                    quantity = quantity,
+                    pricePerUnit = ticker.currentPrice,
+                )
+            )
+
+            val newQty = ownedQty - quantity
+            if (newQty > 0) {
+                holdingDao.updateHolding(existingHolding!!.copy(quantity = newQty))
+            } else {
+                holdingDao.deleteHolding(existingHolding!!)
             }
-            portfolioDao.insertPoint(PortfolioPoint(totalValue = total))
-        } catch (error: Exception) {
-            Log.e(TAG, "Failed to refresh portfolio from Pi", error)
-        }
-    }
 
-    companion object {
-        private const val TAG = "MainViewModel"
+            val totalStr = String.format(Locale.US, "%.2f", totalRevenue)
+            _tradeStatusMessage.value = "✅ Sold $quantity shares of ${ticker.symbol} ($totalStr SC)"
+        }
     }
 }
